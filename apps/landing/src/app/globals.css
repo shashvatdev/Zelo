@@ -3656,3 +3656,13 @@ html:not(.cine) .hero[data-phase="gate"] .hero-note {
 .plan-tag {
   background: var(--coral-ink);
 }
+
+/* Hero spacing: windows and panels after a hero never touch the buttons above them. */
+.vs-hero {
+  padding-top: clamp(32px, 5vw, 56px);
+}
+
+.vs-window,
+.showcase {
+  margin-top: clamp(36px, 4vw, 52px);
+}
