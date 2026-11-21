@@ -259,8 +259,8 @@ export default async function VsPage(props: PageProps<"/vs/[competitor]">) {
           }
         />
         <p className="tm">
-          Jira and ClickUp are trademarks of their respective owners. Zelo is
-          not affiliated with or endorsed by them.
+          All product names mentioned are trademarks of their respective owners.
+          Zelo is not affiliated with or endorsed by them.
         </p>
       </main>
       <Waitlist />

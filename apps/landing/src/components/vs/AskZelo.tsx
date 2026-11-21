@@ -72,8 +72,7 @@ export default function AskZelo() {
     clearTimers();
     if (withGesture) stopAuto();
     // A typed or clicked question is a user gesture, so sound can start here.
-    if (withGesture && sound && wantsSound())
-      sound.enable({ ambient: false, voices: false });
+    if (withGesture && sound && wantsSound()) sound.enable({ voices: false });
     const result = ask(clean);
     setQuestion(clean);
     setText("");

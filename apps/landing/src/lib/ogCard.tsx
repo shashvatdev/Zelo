@@ -23,6 +23,9 @@ export function OgCard({
   line2: string;
   sub: string;
 }) {
+  // Long headlines step down so they never spill out of the card.
+  const len = line1.length + line2.length;
+  const big = len > 58 ? 46 : len > 42 ? 54 : 64;
   return (
     <div
       style={{
@@ -77,7 +80,7 @@ export function OgCard({
           </div>
           <div
             style={{
-              fontSize: 64,
+              fontSize: big,
               fontWeight: 800,
               color: ink,
               lineHeight: 1.04,
@@ -88,7 +91,7 @@ export function OgCard({
           </div>
           <div
             style={{
-              fontSize: 64,
+              fontSize: big,
               fontWeight: 800,
               color: coral,
               lineHeight: 1.04,

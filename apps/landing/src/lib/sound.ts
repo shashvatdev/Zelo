@@ -23,7 +23,6 @@ class SoundEngine {
   private master: GainNode | null = null;
   private session: GainNode | null = null;
   private noise: AudioBuffer | null = null;
-  private ambientStop: (() => void) | null = null;
   private voiceData: Promise<ArrayBuffer[]> | null = null;
   private voices: AudioBuffer[] = [];
   enabled = false;
@@ -60,12 +59,11 @@ class SoundEngine {
     }
   }
 
-  /** `ambient: false` turns on effects only (used by the demo on the comparison pages). */
-  async enable(opts: { ambient?: boolean; voices?: boolean } = {}) {
+  /** Turns sound on. There is no background drone: only the intro's music and short effects. */
+  async enable(opts: { voices?: boolean } = {}) {
     const ctx = this.ensure();
     const resumed = ctx.resume();
     this.enabled = true;
-    if (opts.ambient !== false) this.startAmbient();
     await resumed;
     if (opts.voices !== false) await this.decodeVoices();
   }
@@ -73,7 +71,6 @@ class SoundEngine {
   disable() {
     this.enabled = false;
     this.stopSession();
-    this.stopAmbient();
   }
 
   private async decodeVoices() {
@@ -313,52 +310,6 @@ class SoundEngine {
       pluck(chord.arp[(b * 2) % 4], s, 0.045);
       pluck(chord.arp[(b * 2 + 1) % 4], s + beat / 2, 0.035);
     }
-  }
-
-  /** A quiet, warm drone that sits under the page while sound is on. */
-  private startAmbient() {
-    if (this.ambientStop || !this.ctx) return;
-    const ctx = this.ctx;
-    const out = ctx.createGain();
-    out.gain.setValueAtTime(0.0001, ctx.currentTime);
-    out.gain.exponentialRampToValueAtTime(0.045, ctx.currentTime + 3);
-    const lp = ctx.createBiquadFilter();
-    lp.type = "lowpass";
-    lp.frequency.value = 700;
-    lp.Q.value = 0.4;
-    const lfo = ctx.createOscillator();
-    const lfoGain = ctx.createGain();
-    lfo.frequency.value = 0.07;
-    lfoGain.gain.value = 260;
-    lfo.connect(lfoGain).connect(lp.frequency);
-    lp.connect(out).connect(this.master!);
-
-    const notes = [110, 164.81, 220.5, 277.18];
-    const oscs = notes.map((f, i) => {
-      const o = ctx.createOscillator();
-      o.type = i === 2 ? "triangle" : "sine";
-      o.frequency.value = f;
-      o.detune.value = (i - 1.5) * 4;
-      const g = ctx.createGain();
-      g.gain.value = i === 3 ? 0.25 : 0.6;
-      o.connect(g).connect(lp);
-      o.start();
-      return o;
-    });
-    lfo.start();
-
-    this.ambientStop = () => {
-      const now = ctx.currentTime;
-      out.gain.cancelScheduledValues(now);
-      out.gain.setValueAtTime(out.gain.value, now);
-      out.gain.exponentialRampToValueAtTime(0.0001, now + 0.8);
-      [...oscs, lfo].forEach((o) => o.stop(now + 0.9));
-      this.ambientStop = null;
-    };
-  }
-
-  private stopAmbient() {
-    this.ambientStop?.();
   }
 }
 

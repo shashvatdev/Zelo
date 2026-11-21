@@ -2,13 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Nav from "@/components/Nav";
 import Reveal from "@/components/Reveal";
+import { RelatedLinks } from "@/components/page/PageBits";
+import { ALTERNATIVES } from "@/content/alternatives";
 import Waitlist from "@/components/Waitlist";
 import { COMPETITORS } from "@/lib/competitors";
 import { SITE, SITE_URL } from "@/lib/site";
 
-const title = "Switching to Zelo: how it compares to Jira and ClickUp";
+const title = "Compare Zelo with Jira, ClickUp, Linear and more";
 const description =
-  "Coming from Jira or ClickUp? See what changes when your work becomes one connected map of releases, features and tickets, and what comes with you.";
+  "Coming from Jira, ClickUp, Linear, Asana, monday.com or Notion? See what changes when your work becomes one connected map, and what comes with you.";
 
 export const metadata: Metadata = {
   title: { absolute: title },
@@ -119,6 +121,14 @@ export default function ComparePage() {
           </div>
         </section>
 
+        <RelatedLinks
+          title="Prefer a list?"
+          links={ALTERNATIVES.map((a) => ({
+            href: `/alternatives/${a.slug}`,
+            label: `Best ${a.tool} alternatives`,
+          }))}
+        />
+
         <section className="section">
           <Reveal>
             <p className="kicker">What switching means</p>
@@ -137,8 +147,8 @@ export default function ComparePage() {
           </div>
         </section>
         <p className="tm">
-          Jira and ClickUp are trademarks of their respective owners. Zelo is
-          not affiliated with or endorsed by them.
+          All product names mentioned are trademarks of their respective owners.
+          Zelo is not affiliated with or endorsed by them.
         </p>
       </main>
       <Waitlist />

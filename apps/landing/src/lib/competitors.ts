@@ -169,6 +169,276 @@ export const COMPETITORS: Competitor[] = [
       },
     ],
   },
+  {
+    slug: "linear",
+    name: "Linear",
+    site: "https://linear.app",
+    metaTitle: "Zelo vs Linear: a visual Linear alternative",
+    metaDescription:
+      "Compare Zelo and Linear. Linear is a fast issue tracker; Zelo maps every ticket to its feature, module and release on one canvas, with specs on the work.",
+    headline: ["Linear makes issues fast.", "Zelo makes releases visible."],
+    lede: "Zelo is a visual Linear alternative for teams who want to see how the work fits together: modules, releases, features and tickets on one connected map, with the business team's specs right on the work.",
+    rows: [
+      {
+        topic: "Main view",
+        them: "Fast, keyboard-first lists and boards of issues, grouped by team, cycle and project.",
+        zelo: "A canvas of connected nodes: modules, releases, features and tickets.",
+      },
+      {
+        topic: "Planning",
+        them: "Cycles for sprints, projects and initiatives for bigger goals.",
+        zelo: "Releases as trees, with features from any module and progress rolling up.",
+      },
+      {
+        topic: "Docs",
+        them: "Project documents and descriptions alongside issues.",
+        zelo: "A rich doc on every node, so the spec sits on the exact feature it describes.",
+      },
+      {
+        topic: "Who uses it",
+        them: "Mostly engineering and product teams.",
+        zelo: "The whole release team: PMs, developers, QA and the business side.",
+      },
+      {
+        topic: "Product history",
+        them: "Completed cycles, projects and issue history.",
+        zelo: "A product map of every release by module, from day zero to today.",
+      },
+      {
+        topic: "Best for",
+        them: "Engineering teams who want the fastest issue tracker.",
+        zelo: "Teams who want to see the whole product and release at a glance.",
+      },
+    ],
+    switchSteps: [
+      {
+        title: "Connect Linear",
+        body: "Authorise your workspace and pick the teams and projects to bring over.",
+      },
+      {
+        title: "Map it",
+        body: "Projects become features, issues become tickets under them, and you choose the release each belongs to.",
+      },
+      {
+        title: "Try it on one release",
+        body: "Plan your next release in Zelo and keep Linear open until the team prefers the map.",
+      },
+    ],
+    faqs: [
+      {
+        q: "Is Zelo a Linear alternative?",
+        a: "For teams that want a visual map of their product and releases, yes. Linear is a fast, list-first issue tracker loved by engineers; Zelo connects tickets to features, modules and releases on one canvas, with specs and AI built in.",
+      },
+      {
+        q: "Is Zelo as fast as Linear?",
+        a: "Speed is a core goal: keyboard shortcuts, a command palette and list views for quick edits, with the canvas when you want the bigger picture.",
+      },
+      {
+        q: "Can I import from Linear?",
+        a: "One-click import from Linear is planned for the beta, mapping projects to features and issues to tickets.",
+      },
+    ],
+  },
+  {
+    slug: "asana",
+    name: "Asana",
+    site: "https://asana.com",
+    metaTitle: "Zelo vs Asana: an Asana alternative for software teams",
+    metaDescription:
+      "Compare Zelo and Asana. Asana manages work across a company; Zelo is built for software releases, with every ticket tied to its feature and release.",
+    headline: ["Asana manages work.", "Zelo ships software."],
+    lede: "Zelo is an Asana alternative built for software teams. Instead of projects and task lists, your work is a map of modules, releases, features and tickets, with progress that rolls up to the release.",
+    rows: [
+      {
+        topic: "Main view",
+        them: "Projects with lists, boards, timelines and calendars of tasks.",
+        zelo: "A canvas where modules, releases, features and tickets are connected nodes.",
+      },
+      {
+        topic: "Built for",
+        them: "Work management across departments, from marketing to operations.",
+        zelo: "Planning and shipping software releases.",
+      },
+      {
+        topic: "Releases",
+        them: "Modelled with projects, sections, milestones or custom fields.",
+        zelo: "A first-class release node with a gate, progress and release notes.",
+      },
+      {
+        topic: "Bugs",
+        them: "Tracked as tasks, often in a dedicated project or form.",
+        zelo: "Attached to the module they break and planned into a release, with regression history.",
+      },
+      {
+        topic: "AI",
+        them: "Asana offers AI features for its work graph.",
+        zelo: "AI reads the release graph to draft tickets, answer questions and flag blockers.",
+      },
+      {
+        topic: "Best for",
+        them: "Company-wide teams coordinating many kinds of projects.",
+        zelo: "Software teams who want release structure at a glance.",
+      },
+    ],
+    switchSteps: [
+      {
+        title: "Connect Asana",
+        body: "Choose the projects your product team uses.",
+      },
+      {
+        title: "Map it",
+        body: "Projects or sections become features and releases; tasks become tickets.",
+      },
+      {
+        title: "Keep Asana for the rest",
+        body: "Other departments can stay in Asana while the product team moves to the map.",
+      },
+    ],
+    faqs: [
+      {
+        q: "Is Zelo an Asana alternative?",
+        a: "For software teams, yes. Asana is a broad work management tool; Zelo focuses on shipping software, with releases, features, tickets and bugs connected on one canvas.",
+      },
+      {
+        q: "Can marketing or ops use Zelo?",
+        a: "Zelo is built for the software release team, including the business people who write specs. Company-wide project management for other departments is better served by general tools.",
+      },
+      {
+        q: "Can I import from Asana?",
+        a: "An Asana importer is planned, mapping projects and sections to features or releases and tasks to tickets.",
+      },
+    ],
+  },
+  {
+    slug: "monday",
+    name: "monday.com",
+    site: "https://monday.com",
+    metaTitle: "Zelo vs monday.com: a visual alternative for software releases",
+    metaDescription:
+      "Compare Zelo and monday.com. monday.com builds custom boards for any workflow; Zelo is a ready-made map of modules, releases, features and tickets.",
+    headline: ["monday.com builds boards.", "Zelo maps releases."],
+    lede: "Zelo is a monday.com alternative for software teams that would rather not design their own system. The structure is built in: modules, releases, features and tickets, connected on one canvas.",
+    rows: [
+      {
+        topic: "Main view",
+        them: "Customisable boards with columns, groups and items, plus dashboards.",
+        zelo: "A canvas of connected nodes with the release structure built in.",
+      },
+      {
+        topic: "Setup",
+        them: "Very flexible: you design boards, columns and automations for your workflow.",
+        zelo: "Opinionated for software: start from modules and releases, customise workflows later.",
+      },
+      {
+        topic: "For software teams",
+        them: "monday dev offers sprints, roadmaps and bug tracking on the monday platform.",
+        zelo: "Releases, features, tickets and bugs connected as a graph, with specs on the nodes.",
+      },
+      {
+        topic: "Docs",
+        them: "monday workdocs live alongside boards.",
+        zelo: "Docs live on the exact feature or ticket they describe.",
+      },
+      {
+        topic: "Best for",
+        them: "Teams who want to build a custom system for any process.",
+        zelo: "Software teams who want release structure out of the box.",
+      },
+    ],
+    switchSteps: [
+      {
+        title: "Export your boards",
+        body: "Pick the boards your product team runs releases on.",
+      },
+      {
+        title: "Map it",
+        body: "Groups become features or releases; items become tickets.",
+      },
+      {
+        title: "Run one release",
+        body: "Plan the next release in Zelo and compare.",
+      },
+    ],
+    faqs: [
+      {
+        q: "Is Zelo a monday.com alternative?",
+        a: "For software teams, yes. monday.com is a flexible platform you shape into your own system; Zelo comes with the software release structure built in, as a visual map.",
+      },
+      {
+        q: "How does Zelo compare to monday dev?",
+        a: "monday dev adds sprints, roadmaps and bugs to the monday platform. Zelo is built around a graph of modules, releases, features and tickets, with specs on each node and AI that reads the whole graph.",
+      },
+      {
+        q: "Can I import from monday.com?",
+        a: "A monday.com importer is on the roadmap. Until then, CSV import is the planned path for boards.",
+      },
+    ],
+  },
+  {
+    slug: "notion",
+    name: "Notion",
+    site: "https://www.notion.com",
+    metaTitle: "Zelo vs Notion: from docs to shipped releases",
+    metaDescription:
+      "Compare Zelo and Notion. Notion is a flexible docs and database workspace; Zelo connects specs to the features, tickets and releases they create.",
+    headline: ["Notion holds the docs.", "Zelo connects them to the work."],
+    lede: "Zelo is a Notion alternative for product teams who want their specs and their releases in one place. Docs live on the feature node, tickets hang off it, and the release shows how far the work has come.",
+    rows: [
+      {
+        topic: "Main view",
+        them: "Pages, wikis and databases you can shape into any system.",
+        zelo: "A canvas of modules, releases, features and tickets, with a doc on every node.",
+      },
+      {
+        topic: "Project tracking",
+        them: "Built with databases, properties, relations and views.",
+        zelo: "Built in: status rolls up from tickets to features to releases.",
+      },
+      {
+        topic: "Docs",
+        them: "Best-in-class flexible documents and wikis.",
+        zelo: "Rich docs focused on the work: specs, decisions and designs on the node they describe.",
+      },
+      {
+        topic: "AI",
+        them: "Notion AI works across pages and databases.",
+        zelo: "AI reads the release graph: tickets from specs, answers about progress, blockers flagged.",
+      },
+      {
+        topic: "Best for",
+        them: "Teams who want one flexible workspace for notes, wikis and lightweight tracking.",
+        zelo: "Software teams who want specs, tickets and releases connected.",
+      },
+    ],
+    switchSteps: [
+      {
+        title: "Keep your wiki",
+        body: "Company handbooks and notes can stay in Notion.",
+      },
+      {
+        title: "Move product specs",
+        body: "Bring PRDs onto their feature nodes in Zelo, where tickets are created from them.",
+      },
+      {
+        title: "Plan a release",
+        body: "Watch specs, tickets and progress meet on one map.",
+      },
+    ],
+    faqs: [
+      {
+        q: "Is Zelo a Notion alternative?",
+        a: "For product and engineering work, yes. Notion is a flexible workspace for docs and databases; Zelo is built for shipping software, with specs attached to the features and releases they create.",
+      },
+      {
+        q: "Can I keep using Notion for our wiki?",
+        a: "Yes. Many teams keep company wikis in Notion and move product specs and release work to Zelo.",
+      },
+      {
+        q: "Can I import Notion pages?",
+        a: "Importing Notion pages as feature docs is planned, so existing PRDs can land on the right nodes.",
+      },
+    ],
+  },
 ];
 
 export const getCompetitor = (slug: string) =>

@@ -23,3 +23,16 @@ Software product companies and agencies of roughly 20 to 200 people where produc
 - Switching to Zelo (comparisons hub): /compare
 - Zelo vs Jira: /vs/jira
 - Zelo vs ClickUp: /vs/clickup
+
+## More pages
+
+- Pricing (free while in beta): /pricing
+- Solutions: /solutions (release management, bug tracking, product roadmap, visual project management)
+- Teams: /for (product managers, engineering teams, agencies, QA teams)
+- Comparisons: /compare, /vs/jira, /vs/clickup, /vs/linear, /vs/asana, /vs/monday, /vs/notion
+- Alternatives: /alternatives/jira, /alternatives/clickup
+- Free templates: /templates (release plan, PRD, bug triage, sprint retro, release notes)
+- Free tools: /tools/release-notes-generator, /tools/velocity-calculator
+- Guides: /guides
+- Glossary: /glossary
+- About: /about · Security: /security

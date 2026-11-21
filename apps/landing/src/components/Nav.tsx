@@ -31,10 +31,10 @@ export default function Nav() {
     <header className="nav">
       <Logo />
       <nav aria-label="Main">
-        <Link href="/#problem">Why</Link>
-        <Link href="/#how">How it works</Link>
-        <Link href="/#ai">AI</Link>
-        <Link href="/#faq">FAQ</Link>
+        <Link href="/#how">Product</Link>
+        <Link href="/solutions">Solutions</Link>
+        <Link href="/templates">Templates</Link>
+        <Link href="/pricing">Pricing</Link>
       </nav>
       <a href="#waitlist" className="btn btn-ink btn-sm">
         Join the waitlist

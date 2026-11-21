@@ -1,9 +1,31 @@
 "use client";
 
 import Link from "next/link";
+import { ALTERNATIVES } from "@/content/alternatives";
+import { SOLUTIONS, TEAMS } from "@/content/landings";
+import { COMPETITORS } from "@/lib/competitors";
 import { useState, type FormEvent } from "react";
 import { Logo } from "./Nav";
 import Reveal from "./Reveal";
+
+function FooterCol({
+  title,
+  links,
+}: {
+  title: string;
+  links: (string[] | [string, string])[];
+}) {
+  return (
+    <nav className="footer-col" aria-label={title}>
+      <p className="footer-h">{title}</p>
+      {links.map(([href, label]) => (
+        <Link key={href} href={href}>
+          {label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
 
 export default function Waitlist() {
   const [done, setDone] = useState(false);
@@ -54,19 +76,58 @@ export default function Waitlist() {
           <Logo />
           <p>Work isn&apos;t a list. It&apos;s a map.</p>
         </div>
-        <nav className="footer-col" aria-label="Product">
-          <p className="footer-h">Product</p>
-          <Link href="/#how">How it works</Link>
-          <Link href="/#ai">AI</Link>
-          <Link href="/#faq">FAQ</Link>
-          <Link href="/#waitlist">Join the waitlist</Link>
-        </nav>
-        <nav className="footer-col" aria-label="Compare">
-          <p className="footer-h">Compare</p>
-          <Link href="/compare">Switching to Zelo</Link>
-          <Link href="/vs/jira">Zelo vs Jira</Link>
-          <Link href="/vs/clickup">Zelo vs ClickUp</Link>
-        </nav>
+        <FooterCol
+          title="Product"
+          links={[
+            ["/#how", "How it works"],
+            ["/#ai", "AI"],
+            ["/pricing", "Pricing"],
+            ["/changelog", "Changelog"],
+            ["/#waitlist", "Join the waitlist"],
+          ]}
+        />
+        <FooterCol
+          title="Solutions"
+          links={SOLUTIONS.map((x) => [`/solutions/${x.slug}`, x.label])}
+        />
+        <FooterCol
+          title="Teams"
+          links={TEAMS.map((x) => [`/for/${x.slug}`, x.label])}
+        />
+        <FooterCol
+          title="Compare"
+          links={[
+            ["/compare", "Switching to Zelo"],
+            ...COMPETITORS.map(
+              (c) => [`/vs/${c.slug}`, `Zelo vs ${c.name}`] as [string, string],
+            ),
+            ...ALTERNATIVES.map(
+              (a) =>
+                [`/alternatives/${a.slug}`, `${a.tool} alternatives`] as [
+                  string,
+                  string,
+                ],
+            ),
+          ]}
+        />
+        <FooterCol
+          title="Resources"
+          links={[
+            ["/templates", "Templates"],
+            ["/guides", "Guides"],
+            ["/glossary", "Glossary"],
+            ["/tools", "Free tools"],
+          ]}
+        />
+        <FooterCol
+          title="Company"
+          links={[
+            ["/about", "About"],
+            ["/security", "Security"],
+            ["/privacy", "Privacy"],
+            ["/terms", "Terms"],
+          ]}
+        />
         <p className="footer-c">© 2026 Zelo</p>
       </footer>
     </>
