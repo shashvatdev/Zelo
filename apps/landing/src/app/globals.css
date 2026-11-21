@@ -1597,7 +1597,8 @@ html.intro-lock body {
   font-size: clamp(46px, 8.4vw, 116px);
   line-height: 0.98;
   max-width: 13ch;
-  animation: gateUp 0.8s 0.2s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  /* Movement only: an opacity fade would delay Largest Contentful Paint. */
+  animation: gateRise 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
 .gate-see {
@@ -1630,6 +1631,12 @@ html.intro-lock body {
   color: var(--ink-2);
   max-width: 40ch;
   animation: gateUp 0.8s 0.35s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes gateRise {
+  from {
+    transform: translateY(22px);
+  }
 }
 
 @keyframes gateUp {
@@ -1768,4 +1775,316 @@ html.intro-lock body {
   .on-touch {
     display: inline;
   }
+}
+
+/* ---------- Film only for direct visits (see layout.tsx) ---------- */
+
+html:not(.cine) .gate,
+html:not(.cine) .intro-backdrop {
+  display: none;
+}
+
+html:not(.cine) .hero[data-phase="gate"] .hero-copy > *,
+html:not(.cine) .hero[data-phase="gate"] .hero-note {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---------- FAQ ---------- */
+
+.faq {
+  margin-top: 48px;
+  border-top: 1.5px solid var(--ink);
+  max-width: 860px;
+}
+
+.faq-item {
+  border-bottom: 1.3px dashed var(--line-strong);
+}
+
+.faq-item summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 22px 4px;
+  list-style: none;
+  cursor: inherit;
+}
+
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-item h3 {
+  flex: 1;
+  font-family: var(--font-serif), serif;
+  font-weight: 400;
+  font-size: clamp(22px, 2.4vw, 28px);
+  line-height: 1.2;
+}
+
+.faq-mark {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+}
+
+.faq-mark::before,
+.faq-mark::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 1.8px;
+  background: var(--ink);
+  transform: translate(-50%, -50%);
+  transition: transform 0.2s ease;
+}
+
+.faq-mark::after {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.faq-item[open] .faq-mark {
+  background: var(--coral);
+  border-color: var(--coral);
+}
+
+.faq-item[open] .faq-mark::before,
+.faq-item[open] .faq-mark::after {
+  background: #fff;
+}
+
+.faq-item[open] .faq-mark::after {
+  transform: translate(-50%, -50%) rotate(0deg);
+}
+
+.faq-item p {
+  padding: 0 52px 24px 4px;
+  color: var(--ink-2);
+  font-size: 16.5px;
+  max-width: 68ch;
+}
+
+/* ---------- Gate background: a living release tree ---------- */
+
+.gate-tree {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Mouse parallax (--px/--py from GateTree) plus a slow camera drift. */
+.gate-tree-cam {
+  position: absolute;
+  inset: -3%;
+  transform: translate3d(var(--px, 0), var(--py, 0), 0);
+}
+
+.gate-tree-cam svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0.5;
+  animation: camDrift 22s ease-in-out infinite alternate;
+  transform-origin: 50% 40%;
+  transition: opacity 0.9s ease 1.3s;
+}
+
+.gate-tree-cam svg.gt-fade {
+  opacity: 0;
+}
+
+@keyframes camDrift {
+  from {
+    transform: scale(1.06) translate(-0.6%, 0.4%);
+  }
+  to {
+    transform: scale(1) translate(0.6%, -0.4%);
+  }
+}
+
+.gate-tree text {
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+.gt-release {
+  font-size: 23px;
+  font-weight: 600;
+  fill: var(--paper);
+}
+
+.gt-release-sub {
+  font-size: 15px;
+  fill: var(--muted-2);
+}
+
+.gt-feature {
+  font-size: 20px;
+  font-weight: 600;
+  fill: var(--ink);
+}
+
+.gt-count {
+  font-size: 15px;
+  fill: var(--muted);
+}
+
+.gt-status {
+  font-size: 14px;
+  fill: var(--muted);
+}
+
+.gt-bar {
+  transform-box: fill-box;
+  transform-origin: left center;
+  transition:
+    transform 0.35s cubic-bezier(0.3, 0.8, 0.2, 1),
+    fill 0.3s ease;
+}
+
+/* Each status change replays this little pop. */
+.gt-bump {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: gtBump 0.32s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+
+@keyframes gtBump {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.07);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.gt-pulse {
+  fill: var(--coral);
+  filter: drop-shadow(0 0 6px var(--coral));
+}
+
+.gt-cursor {
+  transition: transform 0.28s cubic-bezier(0.3, 0.8, 0.25, 1);
+}
+
+.gt-cursor-name {
+  font-size: 14px;
+  font-weight: 600;
+  fill: #fff;
+}
+
+.gt-stamp {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: stamp 0.45s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+}
+
+@keyframes stamp {
+  from {
+    opacity: 0;
+    transform: scale(2.2);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.gt-stamp-text {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  fill: var(--green);
+}
+
+/* Paper glow behind the copy so the tagline always reads cleanly. */
+.gate-veil {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 42% 38% at 50% 55%,
+    var(--paper) 42%,
+    transparent 100%
+  );
+}
+
+.gate-top,
+.gate-center,
+.gate-foot {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gate-tree-cam svg,
+  .gt-bump,
+  .gt-stamp {
+    animation: none;
+  }
+}
+
+/* ---------- Gate copy over the living tree: bolder, with a paper halo ---------- */
+
+.gate-veil {
+  background: radial-gradient(
+    ellipse 58% 52% at 50% 56%,
+    var(--paper) 48%,
+    color-mix(in srgb, var(--paper) 82%, transparent) 66%,
+    transparent 100%
+  );
+}
+
+.gate-title {
+  color: var(--ink);
+  -webkit-text-stroke: 1.1px var(--ink);
+  paint-order: stroke fill;
+  text-shadow:
+    0 0 4px var(--paper),
+    0 0 18px var(--paper),
+    0 0 40px var(--paper);
+}
+
+.gate-sub {
+  color: var(--ink);
+  font-weight: 500;
+  font-size: clamp(17px, 1.9vw, 21px);
+  text-shadow:
+    0 0 3px var(--paper),
+    0 0 12px var(--paper),
+    0 0 26px var(--paper);
+}
+
+.gate-eyebrow {
+  font-size: 26px;
+  font-weight: 600;
+  text-shadow:
+    0 0 3px var(--paper),
+    0 0 14px var(--paper);
+}
+
+.gate-mute {
+  color: var(--ink-2);
+  font-weight: 500;
+  text-shadow:
+    0 0 3px var(--paper),
+    0 0 12px var(--paper);
+}
+
+.gate-foot {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.slider-text {
+  font-weight: 600;
 }

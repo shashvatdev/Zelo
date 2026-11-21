@@ -1,0 +1,22 @@
+# Zelo
+
+> Zelo is a visual project management tool for software teams and a visual alternative to Jira and ClickUp. Every ticket is connected to its feature, every feature to its release, and every spec lives on the work it describes, all on one living canvas instead of a flat list.
+
+Zelo is in private beta (waitlist open). It is free while in beta.
+
+## What Zelo does
+
+- Shows work as a connected map: product > modules > releases > features > tickets, plus bugs.
+- Status rolls up the tree, so release progress is visible without a status meeting.
+- Docs (PRDs, specs, designs) live on the feature or ticket they describe.
+- Product map: every release ever shipped, grouped by module.
+- AI reads the project graph to draft tickets from specs, answer questions from a feature's docs, flag release blockers and write release notes. People approve every change; customer data is not used for training.
+
+## Who it is for
+
+Software product companies and agencies of roughly 20 to 200 people where product managers, developers, QA and business teams share releases.
+
+## Links
+
+- Home and waitlist: /
+- FAQ: /#faq

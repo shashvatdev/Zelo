@@ -33,6 +33,7 @@ export default function Nav() {
         <a href="#how">How it works</a>
         <a href="#ai">AI</a>
         <a href="#compare">Compare</a>
+        <a href="#faq">FAQ</a>
       </nav>
       <a href="#waitlist" className="btn btn-ink btn-sm">
         Join the waitlist

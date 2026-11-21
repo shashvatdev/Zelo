@@ -41,6 +41,10 @@ export default function Compare() {
         <h2 className="display h2">
           Same work. <em>Finally visible.</em>
         </h2>
+        <p className="body-lg narrow">
+          Looking for a Jira or ClickUp alternative? Here&apos;s what changes
+          when your work is a map instead of a list.
+        </p>
       </Reveal>
       <Reveal delay={0.1}>
         <table className="compare">

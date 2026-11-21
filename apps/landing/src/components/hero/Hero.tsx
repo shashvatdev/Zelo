@@ -128,16 +128,15 @@ export default function Hero() {
     const update = () => setCompact(mq.matches);
     update();
     mq.addEventListener("change", update);
-    sound?.preload();
-    // No full-screen intro for people who asked for less motion.
-    const reduce = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
+    // The pre-paint script in layout.tsx adds "cine" for direct visits. Search visitors and
+    // reduced-motion users get the normal page; the film stays one click away.
+    const cinematic = document.documentElement.classList.contains("cine");
+    if (cinematic) sound?.preload();
     const finish = () => {
       setGateGone(true);
       setPhase("done");
     };
-    if (reduce) finish();
+    if (!cinematic) finish();
     else {
       window.scrollTo(0, 0);
       // Browsers that already allow audio skip the entry screen.
@@ -409,7 +408,8 @@ export default function Hero() {
         </div>
       </div>
       <p className="hero-note">
-        For PMs, developers, QA and the business team, on the same canvas.
+        Visual project management for PMs, developers, QA and the business team,
+        on the same canvas.
       </p>
     </section>
   );

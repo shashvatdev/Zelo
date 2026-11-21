@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Instrument_Serif, Caveat } from "next/font/google";
+import { SITE, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 const sans = Geist({
@@ -20,9 +21,39 @@ const hand = Caveat({
 });
 
 export const metadata: Metadata = {
-  title: "Zelo: work isn't a list, it's a map",
-  description:
-    "Zelo connects every ticket to its feature, every feature to its release, and every doc to the work it describes. One living canvas for software teams.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: SITE.title,
+    template: `%s | ${SITE.name}`,
+  },
+  description: SITE.description,
+  applicationName: SITE.name,
+  category: "Project management software",
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: SITE.name,
+    title: SITE.shortTitle,
+    description: SITE.description,
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE.shortTitle,
+    description: SITE.description,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
 };
 
 export const viewport: Viewport = {
@@ -30,12 +61,23 @@ export const viewport: Viewport = {
   colorScheme: "light",
 };
 
+/**
+ * Runs before first paint. The full-screen film (entry gate + intro) is only for direct visits.
+ * Visitors who arrive from a search engine land straight on the page: Google demotes pages that
+ * cover their content right after a click from search. Reduced-motion users also skip it.
+ */
+const cinematicScript = `try{var r=document.referrer||"";var fromSearch=/^https?:\\/\\/([^/]+\\.)?(google|bing|duckduckgo|yahoo|yandex|baidu|ecosia|brave|startpage|qwant|perplexity|chatgpt)\\./i.test(r);var calm=window.matchMedia("(prefers-reduced-motion: reduce)").matches;if(!fromSearch&&!calm)document.documentElement.classList.add("cine")}catch(e){}`;
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
       className={`${sans.variable} ${serif.variable} ${hand.variable}`}
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: cinematicScript }} />
+      </head>
       <body>{children}</body>
     </html>
   );

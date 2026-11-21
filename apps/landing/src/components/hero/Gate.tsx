@@ -2,6 +2,7 @@
 
 import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { Logo } from "../Nav";
+import GateTree from "./GateTree";
 
 /**
  * The entry screen. Browsers only allow audio after a click, tap, swipe or key press, so the
@@ -72,13 +73,14 @@ export default function Gate({
       role="dialog"
       aria-label="Start the Zelo film"
     >
+      <GateTree />
       <div className="gate-top">
         <Logo />
       </div>
 
       <div className="gate-center">
         <p className="gate-eyebrow hand">a 12-second film</p>
-        <h1 className="display gate-title">
+        <p className="display gate-title">
           What if you could{" "}
           <span className="gate-see">
             <em>see</em>
@@ -91,7 +93,7 @@ export default function Gate({
             </svg>
           </span>{" "}
           your release?
-        </h1>
+        </p>
         <p className="gate-sub">
           Tickets, features and releases on one living map. Turn your sound on.
         </p>
@@ -101,7 +103,7 @@ export default function Gate({
           className={done ? "slider done" : "slider"}
           role="button"
           tabIndex={0}
-          aria-label="Start with sound"
+          aria-label="Click or swipe to start, with sound"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
