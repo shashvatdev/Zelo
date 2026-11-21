@@ -17,7 +17,6 @@ import type {
   Status,
   Ticket,
 } from "@/data/model";
-import { SEED } from "@/data/seed";
 
 /**
  * App state: the work graph plus what the user is looking at.
@@ -46,6 +45,8 @@ export type State = {
   notifRead: Record<string, { ids: string[]; before: string }>;
   /** Set once in the browser: default cut-off for "unread" (never read the clock during prerender). */
   unreadSince: string | null;
+  /** What "Reset" goes back to: the sample data, or the freshly onboarded product. */
+  initial: Graph;
 };
 
 export type Action =
@@ -73,11 +74,13 @@ export type Action =
   | { type: "notifHydrate"; value: State["notifRead"] }
   | { type: "unreadSince"; at: string }
   | { type: "reset" }
-  | { type: "side"; open?: boolean };
+  | { type: "side"; open?: boolean }
+  | { type: "addFeature"; releaseId: string; name: string; moduleId: string; ownerId: string | null; spec: string }
+  | { type: "addRelease"; version: string; name: string; date: string; state: "current" | "planned" | "shipped" }
+  | { type: "addModule"; name: string }
+  | { type: "syncPeople"; people: Graph["people"] };
 
-const KEY = "zelo-demo-graph-v3";
 const SIDE_KEY = "zelo-sidebar";
-const ME_KEY = "zelo-me";
 const ASK_KEY = "zelo-ask";
 const NOTIF_KEY = "zelo-notif-read";
 
@@ -161,8 +164,11 @@ export function defaultBefore() {
 
 function reducer(s: State, a: Action): State {
   switch (a.type) {
-    case "hydrate":
-      return { ...s, graph: a.graph };
+    case "hydrate": {
+      // Keep anyone who joined since this board was saved (people sync can land before the load).
+      const extra = s.graph.people.filter((p) => !a.graph.people.some((x) => x.id === p.id));
+      return { ...s, graph: { ...a.graph, people: [...a.graph.people, ...extra] } };
+    }
     case "scope":
       return { ...s, scope: a.scope, selected: null, viewKey: s.viewKey + 1 };
     case "person":
@@ -336,7 +342,53 @@ function reducer(s: State, a: Action): State {
     case "unreadSince":
       return { ...s, unreadSince: a.at };
     case "reset":
-      return { ...s, graph: SEED, selected: null, viewKey: s.viewKey + 1 };
+      return { ...s, graph: s.initial, selected: null, viewKey: s.viewKey + 1 };
+    case "addFeature": {
+      if (!a.name.trim()) return s;
+      const mod = s.graph.modules.find((m) => m.id === a.moduleId);
+      const prefix = (mod?.name ?? "FEAT").replace(/[^a-z]/gi, "").slice(0, 4).toUpperCase() || "FEAT";
+      // The newest earlier version of a same-named feature in this module is what it builds on.
+      const rel = s.graph.releases.find((r) => r.id === a.releaseId);
+      const prev = s.graph.features
+        .filter((f) => f.moduleId === a.moduleId && f.name.toLowerCase() === a.name.trim().toLowerCase())
+        .filter((f) => (s.graph.releases.find((r) => r.id === f.releaseId)?.date ?? "") < (rel?.date ?? ""))
+        .pop();
+      const f = {
+        id: uid("f"),
+        key: nextKey(s.graph, prefix),
+        name: a.name.trim(),
+        moduleId: a.moduleId,
+        releaseId: a.releaseId,
+        ownerId: a.ownerId,
+        extendsId: prev?.id,
+        spec: a.spec.trim() || "No spec yet.",
+        createdAt: nowLocal(),
+        createdBy: s.meId,
+      };
+      const g = logged({ ...s.graph, features: [...s.graph.features, f] }, { target: { kind: "feature", id: f.id }, actorId: s.meId, kind: "created" });
+      return { ...s, graph: g, selected: { kind: "feature", id: f.id }, viewKey: s.viewKey + 1 };
+    }
+    case "addRelease": {
+      if (!a.version.trim()) return s;
+      const r = { id: uid("r"), version: a.version.trim(), name: a.name.trim() || "Untitled", date: a.date, state: a.state };
+      const releases = [...s.graph.releases.map((x) => (a.state === "current" && x.state === "current" ? { ...x, state: "shipped" as const } : x)), r];
+      return { ...s, graph: { ...s.graph, releases }, scope: r.id, personId: null, selected: null, viewKey: s.viewKey + 1 };
+    }
+    case "addModule": {
+      const name = a.name.trim();
+      if (!name || s.graph.modules.some((m) => m.name.toLowerCase() === name.toLowerCase())) return s;
+      const colors = ["#e5582b", "#3866c9", "#2f8f46", "#d48a1c", "#1f8a8a", "#b5401b", "#5a6fd6", "#8a6a3a"];
+      const real = s.graph.modules.filter((m) => !m.misc);
+      const m = { id: uid("m"), name, color: colors[real.length % colors.length] };
+      const misc = s.graph.modules.filter((x) => x.misc);
+      return { ...s, graph: { ...s.graph, modules: [...real, m, ...misc] }, viewKey: s.viewKey + 1 };
+    }
+    case "syncPeople": {
+      const cur = s.graph.people;
+      const next = [...cur.map((p) => a.people.find((x) => x.id === p.id) ?? p), ...a.people.filter((p) => !cur.some((c) => c.id === p.id))];
+      if (JSON.stringify(next) === JSON.stringify(cur)) return s;
+      return { ...s, graph: { ...s.graph, people: next } };
+    }
     case "side":
       return { ...s, sideOpen: a.open ?? !s.sideOpen };
   }
@@ -346,72 +398,65 @@ const Ctx = createContext<{ state: State; dispatch: Dispatch<Action> } | null>(
   null,
 );
 
-export function StoreProvider({ children }: { children: ReactNode }) {
+export function StoreProvider({ children, storageKey, initial, meId }: { children: ReactNode; storageKey: string; initial: Graph; meId: string }) {
   const [state, dispatch] = useReducer(reducer, {
-    graph: SEED,
-    scope: SEED.releases.find((r) => r.state === "current")?.id ?? "all",
+    graph: initial,
+    scope: initial.releases.find((r) => r.state === "current")?.id ?? initial.releases[0]?.id ?? "all",
     personId: null,
     selected: null,
     viewKey: 0,
     sideOpen: true,
-    meId: SEED.people[0].id,
+    meId,
     askOpen: false,
     notifRead: {},
     unreadSince: null,
+    initial,
   });
   const loaded = useRef(false);
 
-  // Load saved demo data once, after the first render (keeps server and client markup identical).
+  // Load this workspace's saved board once, after the first render.
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(KEY);
+      const raw = localStorage.getItem(storageKey);
       if (raw) {
         const g = JSON.parse(raw) as Graph;
-        dispatch({
-          type: "hydrate",
-          graph: {
-            ...g,
-            comments: g.comments ?? [],
-            activity: g.activity ?? [],
-          },
-        });
+        dispatch({ type: "hydrate", graph: { ...g, comments: g.comments ?? [], activity: g.activity ?? [] } });
       }
-      if (localStorage.getItem(SIDE_KEY) === "closed")
-        dispatch({ type: "side", open: false });
-      if (localStorage.getItem(ASK_KEY) === "open" && window.innerWidth >= 1100)
-        dispatch({ type: "ask", open: true });
+      if (localStorage.getItem(SIDE_KEY) === "closed") dispatch({ type: "side", open: false });
+      if (localStorage.getItem(ASK_KEY) === "open" && window.innerWidth >= 1100) dispatch({ type: "ask", open: true });
       dispatch({ type: "unreadSince", at: defaultBefore() });
-      const nr = localStorage.getItem(NOTIF_KEY);
+      const nr = localStorage.getItem(`${NOTIF_KEY}-${storageKey}`);
       if (nr) dispatch({ type: "notifHydrate", value: JSON.parse(nr) });
-      const me = localStorage.getItem(ME_KEY);
-      if (me && SEED.people.some((p) => p.id === me))
-        dispatch({ type: "me", id: me });
     } catch {
-      // Storage blocked or bad data: keep the seed.
+      // Storage blocked or bad data: keep the initial board.
     }
     loaded.current = true;
-  }, []);
+  }, [storageKey]);
+
+  // The signed-in person is "me" (switching accounts re-renders with a new id).
+  useEffect(() => {
+    dispatch({ type: "me", id: meId });
+  }, [meId]);
 
   useEffect(() => {
     if (!loaded.current) return;
     try {
-      localStorage.setItem(KEY, JSON.stringify(state.graph));
+      localStorage.setItem(storageKey, JSON.stringify(state.graph));
     } catch {
       // Storage full or blocked: changes stay in memory only.
     }
-  }, [state.graph]);
+  }, [state.graph, storageKey]);
 
   useEffect(() => {
     if (!loaded.current) return;
     try {
       localStorage.setItem(SIDE_KEY, state.sideOpen ? "open" : "closed");
-      localStorage.setItem(ME_KEY, state.meId);
       localStorage.setItem(ASK_KEY, state.askOpen ? "open" : "closed");
-      localStorage.setItem(NOTIF_KEY, JSON.stringify(state.notifRead));
+      localStorage.setItem(`${NOTIF_KEY}-${storageKey}`, JSON.stringify(state.notifRead));
     } catch {
       // Not saved; defaults come back next time.
     }
-  }, [state.sideOpen, state.meId, state.askOpen, state.notifRead]);
+  }, [state.sideOpen, state.askOpen, state.notifRead, storageKey]);
 
   return <Ctx.Provider value={{ state, dispatch }}>{children}</Ctx.Provider>;
 }

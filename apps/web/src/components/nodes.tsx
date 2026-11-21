@@ -473,6 +473,21 @@ export const LaneNode = memo(function LaneNode({ id, data }: N) {
   );
 });
 
+export const AddFeatureNode = memo(function AddFeatureNode({ id, data }: N) {
+  const { w, h } = SIZE.feature;
+  const first = Boolean(data.first);
+  return (
+    <Shell id={id} w={w} h={h} d={data.delay} className={`clickable ghost-node ${first ? "first" : ""}`} sketch={<Sketch id={id} w={w} h={h} fill={first ? "color-mix(in srgb, var(--coral) 7%, var(--card))" : "transparent"} stroke={first ? "var(--coral)" : "var(--muted-2)"} dashed />}>
+      <span className="ghost-plus" aria-hidden="true">
+        +
+      </span>
+      <strong className="mid">{first ? "Add your first feature" : "Add feature"}</strong>
+      <span className="small muted">{first ? "Features hold the tickets for this version." : "To this version"}</span>
+      <Handle type="target" position={Position.Top} style={hidden} isConnectable={false} />
+    </Shell>
+  );
+});
+
 export const EmptyNode = memo(function EmptyNode({ id, data }: N) {
   return (
     <Shell
@@ -707,6 +722,7 @@ export const nodeTypes = {
   bug: BugNode,
   lane: LaneNode,
   empty: EmptyNode,
+  addFeature: AddFeatureNode,
   product: ProductNode,
   module: ModuleNode,
   releaseHead: ReleaseHeadNode,

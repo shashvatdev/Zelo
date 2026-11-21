@@ -40,6 +40,7 @@ const DIMS: Record<string, { w: number; h: number }> = {
   person: SIZE.root,
   feature: SIZE.feature,
   lane: SIZE.feature,
+  addFeature: SIZE.feature,
   ticket: SIZE.ticket,
   bug: SIZE.ticket,
   empty: { w: 320, h: 64 },
@@ -102,7 +103,8 @@ function versionRaw(
   const nodes: Node<NodeData>[] = [];
   const edges: Edge[] = [];
   const COL = 288;
-  const cols = features.length + (bugs.length ? 1 : 0);
+  const ghost = person ? 0 : 1; // the "+ Add feature" tile
+  const cols = features.length + ghost + (bugs.length ? 1 : 0);
   const cx = (i: number) => (i - (cols - 1) / 2) * COL;
   const rootId = person ? `person:${person.id}` : `release:${release.id}`;
   const prog = releaseProgress(g, releaseId, person?.id);
@@ -190,7 +192,7 @@ function versionRaw(
 
   if (bugs.length) {
     const laneId = "lane:bugs";
-    const i = features.length;
+    const i = features.length + ghost;
     const pos = at(cx(i), FY, SIZE.feature.w);
     const delay = 0.28 + i * 0.08;
     nodes.push({
@@ -230,7 +232,19 @@ function versionRaw(
     });
   }
 
-  if (!features.length && !bugs.length) {
+  if (ghost) {
+    const i = features.length;
+    const delay = 0.28 + i * 0.08;
+    nodes.push({
+      id: "add:feature",
+      type: "addFeature",
+      position: at(cx(i), FY, SIZE.feature.w),
+      data: { delay, releaseId: release.id, first: features.length === 0 },
+    });
+    edges.push(edge("e:root:add", rootId, "add:feature", delay - 0.1, "ghost"));
+  }
+
+  if (person && !features.length && !bugs.length) {
     nodes.push({
       id: "empty",
       type: "empty",

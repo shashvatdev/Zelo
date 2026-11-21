@@ -5,7 +5,6 @@ import { fmtAgo, fmtStamp } from "@/lib/graph";
 import { buildNotifications, type Notif } from "@/lib/notifications";
 import { useStore } from "@/lib/store";
 import { Avatar } from "./nodes";
-import { Picker } from "./Picker";
 
 const VERB: Record<Notif["kind"], string> = {
   assigned: "assigned you",
@@ -133,30 +132,7 @@ export default function Notifications() {
             <div className="np-title">
               <strong>Notifications</strong>
               <span className="np-for">
-                for
-                <Picker
-                  label="Show notifications for"
-                  value={state.meId}
-                  onChange={(id) => dispatch({ type: "me", id })}
-                  className="pk-compact np-who"
-                  menuWidth={230}
-                  options={g.people.map((p) => ({
-                    value: p.id,
-                    label: p.name,
-                    sub: "View as this person (demo)",
-                    icon: <Avatar personId={p.id} size={24} />,
-                  }))}
-                  trigger={
-                    <span className="pk-value">
-                      <Avatar personId={state.meId} size={18} />
-                      {
-                        g.people
-                          .find((p) => p.id === state.meId)
-                          ?.name.split(" ")[0]
-                      }
-                    </span>
-                  }
-                />
+                for <Avatar personId={state.meId} size={16} /> {g.people.find((p) => p.id === state.meId)?.name ?? "you"}
               </span>
             </div>
             <button

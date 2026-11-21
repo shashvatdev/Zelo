@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { layoutAll, layoutVersion, type NodeData } from "@/lib/layout";
 import { useStore, type Selected } from "@/lib/store";
 import CanvasControls, { FIT } from "./CanvasControls";
+import AddFeature from "./AddFeature";
 import SketchEdge from "./SketchEdge";
 import { nodeTypes } from "./nodes";
 
@@ -164,12 +165,28 @@ function Camera({
 export default function Canvas() {
   const { state, dispatch } = useStore();
   const { nodes, edges, onNodesChange } = useLaidOut();
+  const [adding, setAdding] = useState<string | null>(null);
+
+  // "Add your first feature" from the checklist: open the dialog for the version on screen.
+  useEffect(() => {
+    const open = () => {
+      const g = state.graph;
+      const rid = state.scope !== "all" ? state.scope : (g.releases.find((r) => r.state === "current") ?? g.releases[0])?.id;
+      if (rid) setAdding(rid);
+    };
+    window.addEventListener("zelo:add-feature", open);
+    return () => window.removeEventListener("zelo:add-feature", open);
+  }, [state.graph, state.scope]);
 
   const onNodeClick = useCallback(
     (_: unknown, node: Node<NodeData>) => {
       const [prefix, id] = node.id.split(/:(.+)/);
       if (prefix === "release" && state.scope === "all") {
         dispatch({ type: "scope", scope: id });
+        return;
+      }
+      if (prefix === "add") {
+        setAdding(String(node.data.releaseId));
         return;
       }
       if (prefix === "lane" || prefix === "empty") return;
@@ -222,6 +239,7 @@ export default function Canvas() {
           />
         </ReactFlow>
       </ReactFlowProvider>
+      {adding && <AddFeature releaseId={adding} onClose={() => setAdding(null)} />}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { APP_URL } from "@/lib/site";
 import Faq from "@/components/Faq";
 import Nav from "@/components/Nav";
 import Reveal from "@/components/Reveal";
@@ -133,10 +134,18 @@ export default function PricingPage() {
                   ))}
                 </ul>
                 <a
-                  href="#waitlist"
+                  href={
+                    p.name === "Enterprise"
+                      ? "#waitlist"
+                      : `${APP_URL}/signup?plan=${p.name.toLowerCase()}`
+                  }
                   className={p.featured ? "btn btn-ink" : "btn btn-ghost"}
                 >
-                  {p.name === "Enterprise" ? "Talk to us" : "Join the beta"}
+                  {p.name === "Enterprise"
+                    ? "Talk to us"
+                    : p.name === "Free"
+                      ? "Start free"
+                      : `Start ${p.name}`}
                 </a>
               </Reveal>
             ))}

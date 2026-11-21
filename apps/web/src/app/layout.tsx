@@ -7,7 +7,7 @@ const sans = Geist({ variable: "--font-sans", subsets: ["latin"] });
 const serif = Instrument_Serif({ variable: "--font-serif", weight: "400", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Zelo · Product map",
+  title: "Zelo",
   description: "Every version of your product as one connected tree.",
   robots: { index: false, follow: false },
 };

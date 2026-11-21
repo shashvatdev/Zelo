@@ -43,3 +43,6 @@ export const FAQS: { q: string; a: string }[] = [
     a: "Zelo is free while in beta. After launch there will be a free plan for small teams and paid plans per user for growing companies. Join the waitlist for early access.",
   },
 ];
+
+/** The product app (sign up, checkout, onboarding). Set NEXT_PUBLIC_APP_URL in production. */
+export const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3200").replace(/\/$/, "");

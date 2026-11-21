@@ -1,5 +1,5 @@
-import Workspace from "@/components/Workspace";
+import RootRedirect from "@/components/auth/RootRedirect";
 
 export default function Home() {
-  return <Workspace />;
+  return <RootRedirect />;
 }

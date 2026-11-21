@@ -29,7 +29,7 @@ import {
 import { fmtAgo, fmtStamp } from "@/lib/graph";
 import { useStore } from "@/lib/store";
 import { Avatar } from "./nodes";
-import { Picker, StatusIcon } from "./Picker";
+import { StatusIcon } from "./Picker";
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -473,20 +473,9 @@ export default function Comments({ target }: { target: CommentTarget }) {
         onDrop={onDrop}
       >
         <div className="composer-top">
-          <Picker
-            label="Comment as"
-            value={state.meId}
-            onChange={(id) => dispatch({ type: "me", id })}
-            className="pk-compact pk-avatar"
-            menuWidth={230}
-            options={people.map((p) => ({
-              value: p.id,
-              label: p.name,
-              sub: "Comment as this person (demo)",
-              icon: <Avatar personId={p.id} size={26} />,
-            }))}
-            trigger={<Avatar personId={state.meId} size={22} />}
-          />
+          <span className="composer-me" title="You">
+            <Avatar personId={state.meId} size={26} />
+          </span>
           <textarea
             ref={box}
             value={text}
