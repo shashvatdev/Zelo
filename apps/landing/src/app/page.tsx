@@ -1,6 +1,5 @@
 import AiSection from "@/components/AiSection";
 import Compare from "@/components/Compare";
-import CursorLabel from "@/components/CursorLabel";
 import DocsOnNode from "@/components/DocsOnNode";
 import Faq from "@/components/Faq";
 import Hero from "@/components/hero/Hero";
@@ -84,7 +83,6 @@ export default function Home() {
         <Faq />
       </main>
       <Waitlist />
-      <CursorLabel />
     </>
   );
 }

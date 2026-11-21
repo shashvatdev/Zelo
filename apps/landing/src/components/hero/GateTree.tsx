@@ -266,7 +266,17 @@ export default function GateTree() {
           {/* Pulses running from the release down to each feature */}
           {!shipped &&
             shapes.features.map((f, i) => (
-              <circle key={`p-${f.name}`} r="6" className="gt-pulse">
+              <circle
+                key={`p-${f.name}`}
+                r="6"
+                opacity="0"
+                className="gt-pulse"
+              >
+                <set
+                  attributeName="opacity"
+                  to="1"
+                  begin={`${0.75 + i * 0.12}s`}
+                />
                 <animateMotion
                   path={f.edgePath}
                   dur="1.3s"

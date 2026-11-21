@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Instrument_Serif, Caveat } from "next/font/google";
+import CursorLabel from "@/components/CursorLabel";
 import { SITE, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
@@ -64,9 +65,10 @@ export const viewport: Viewport = {
 /**
  * Runs before first paint. The full-screen film (entry gate + intro) is only for direct visits.
  * Visitors who arrive from a search engine land straight on the page: Google demotes pages that
- * cover their content right after a click from search. Reduced-motion users also skip it.
+ * cover their content right after a click from search. Reduced-motion users also skip it, and so
+ * does anyone who has already seen it in this tab.
  */
-const cinematicScript = `try{var r=document.referrer||"";var fromSearch=/^https?:\\/\\/([^/]+\\.)?(google|bing|duckduckgo|yahoo|yandex|baidu|ecosia|brave|startpage|qwant|perplexity|chatgpt)\\./i.test(r);var calm=window.matchMedia("(prefers-reduced-motion: reduce)").matches;if(!fromSearch&&!calm)document.documentElement.classList.add("cine")}catch(e){}`;
+const cinematicScript = `try{var r=document.referrer||"";var fromSearch=/^https?:\\/\\/([^/]+\\.)?(google|bing|duckduckgo|yahoo|yandex|baidu|ecosia|brave|startpage|qwant|perplexity|chatgpt)\\./i.test(r);var calm=window.matchMedia("(prefers-reduced-motion: reduce)").matches;var seen=false;try{seen=sessionStorage.getItem("zelo-film-seen")==="1"}catch(e){}if(!fromSearch&&!calm&&!seen)document.documentElement.classList.add("cine")}catch(e){}`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
@@ -78,7 +80,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: cinematicScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <CursorLabel />
+      </body>
     </html>
   );
 }

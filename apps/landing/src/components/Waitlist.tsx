@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { Logo } from "./Nav";
 import Reveal from "./Reveal";
@@ -49,8 +50,23 @@ export default function Waitlist() {
         </Reveal>
       </section>
       <footer className="footer">
-        <Logo />
-        <p>Work isn&apos;t a list. It&apos;s a map.</p>
+        <div className="footer-brand">
+          <Logo />
+          <p>Work isn&apos;t a list. It&apos;s a map.</p>
+        </div>
+        <nav className="footer-col" aria-label="Product">
+          <p className="footer-h">Product</p>
+          <Link href="/#how">How it works</Link>
+          <Link href="/#ai">AI</Link>
+          <Link href="/#faq">FAQ</Link>
+          <Link href="/#waitlist">Join the waitlist</Link>
+        </nav>
+        <nav className="footer-col" aria-label="Compare">
+          <p className="footer-h">Compare</p>
+          <Link href="/compare">Switching to Zelo</Link>
+          <Link href="/vs/jira">Zelo vs Jira</Link>
+          <Link href="/vs/clickup">Zelo vs ClickUp</Link>
+        </nav>
         <p className="footer-c">© 2026 Zelo</p>
       </footer>
     </>

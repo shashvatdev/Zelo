@@ -20,3 +20,6 @@ Software product companies and agencies of roughly 20 to 200 people where produc
 
 - Home and waitlist: /
 - FAQ: /#faq
+- Switching to Zelo (comparisons hub): /compare
+- Zelo vs Jira: /vs/jira
+- Zelo vs ClickUp: /vs/clickup

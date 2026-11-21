@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Reveal from "./Reveal";
 
 const ROWS = [
@@ -41,10 +42,6 @@ export default function Compare() {
         <h2 className="display h2">
           Same work. <em>Finally visible.</em>
         </h2>
-        <p className="body-lg narrow">
-          Looking for a Jira or ClickUp alternative? Here&apos;s what changes
-          when your work is a map instead of a list.
-        </p>
       </Reveal>
       <Reveal delay={0.1}>
         <table className="compare">
@@ -74,6 +71,10 @@ export default function Compare() {
           </tbody>
         </table>
       </Reveal>
+      <p className="compare-more">
+        Switching from another tool?{" "}
+        <Link href="/compare">See how Zelo compares &rarr;</Link>
+      </p>
     </section>
   );
 }

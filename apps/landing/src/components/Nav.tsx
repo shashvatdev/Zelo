@@ -1,6 +1,8 @@
+import Link from "next/link";
+
 export function Logo() {
   return (
-    <a href="#top" className="logo" aria-label="Zelo home">
+    <Link href="/" className="logo" aria-label="Zelo home">
       <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
         <path
           d="M13 6.5 L6 19 M13 6.5 L20 19"
@@ -20,7 +22,7 @@ export function Logo() {
         <circle cx="20" cy="20" r="3.2" fill="var(--coral)" />
       </svg>
       <span>zelo</span>
-    </a>
+    </Link>
   );
 }
 
@@ -29,11 +31,10 @@ export default function Nav() {
     <header className="nav">
       <Logo />
       <nav aria-label="Main">
-        <a href="#problem">Why</a>
-        <a href="#how">How it works</a>
-        <a href="#ai">AI</a>
-        <a href="#compare">Compare</a>
-        <a href="#faq">FAQ</a>
+        <Link href="/#problem">Why</Link>
+        <Link href="/#how">How it works</Link>
+        <Link href="/#ai">AI</Link>
+        <Link href="/#faq">FAQ</Link>
       </nav>
       <a href="#waitlist" className="btn btn-ink btn-sm">
         Join the waitlist

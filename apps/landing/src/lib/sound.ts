@@ -60,13 +60,14 @@ class SoundEngine {
     }
   }
 
-  async enable() {
+  /** `ambient: false` turns on effects only (used by the demo on the comparison pages). */
+  async enable(opts: { ambient?: boolean; voices?: boolean } = {}) {
     const ctx = this.ensure();
     const resumed = ctx.resume();
     this.enabled = true;
-    this.startAmbient();
+    if (opts.ambient !== false) this.startAmbient();
     await resumed;
-    await this.decodeVoices();
+    if (opts.voices !== false) await this.decodeVoices();
   }
 
   disable() {

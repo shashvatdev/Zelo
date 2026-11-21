@@ -63,6 +63,24 @@ function SpeakerIcon({ on }: { on: boolean }) {
 }
 
 const PREF_KEY = "zelo-sound";
+const FILM_KEY = "zelo-film-seen";
+
+/** The film plays once per browser tab; coming back to the home page goes straight to the page. */
+function filmSeen() {
+  try {
+    return sessionStorage.getItem(FILM_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markFilmSeen() {
+  try {
+    sessionStorage.setItem(FILM_KEY, "1");
+  } catch {
+    // Storage blocked: the film may play again on the next visit.
+  }
+}
 
 /** Sound is on by default; only an explicit mute is remembered. */
 function wantsSound() {
@@ -121,16 +139,27 @@ export default function Hero() {
 
   useEffect(() => {
     phaseRef.current = phase;
+    if (phase === "intro" || phase === "done") {
+      // Only count it as seen once the visitor is past the gate (skip, finish or start).
+      if (
+        phase === "intro" ||
+        document.documentElement.classList.contains("cine")
+      )
+        markFilmSeen();
+    }
   }, [phase]);
 
-  useEffect(() => {
+  // Layout effect: decide before the first paint, so returning visitors never see a flash of the gate.
+  useLayoutEffect(() => {
     const mq = window.matchMedia("(max-width: 760px)");
     const update = () => setCompact(mq.matches);
     update();
     mq.addEventListener("change", update);
     // The pre-paint script in layout.tsx adds "cine" for direct visits. Search visitors and
     // reduced-motion users get the normal page; the film stays one click away.
-    const cinematic = document.documentElement.classList.contains("cine");
+    const root = document.documentElement;
+    const cinematic = root.classList.contains("cine") && !filmSeen();
+    if (!cinematic) root.classList.remove("cine");
     if (cinematic) sound?.preload();
     const finish = () => {
       setGateGone(true);
@@ -141,6 +170,7 @@ export default function Hero() {
       window.scrollTo(0, 0);
       // Browsers that already allow audio skip the entry screen.
       if (sound?.canAutoplay() && wantsSound()) {
+        markFilmSeen();
         sound.enable().then(() => {
           setMode("on");
           setGateGone(true);
@@ -183,6 +213,7 @@ export default function Hero() {
 
   // The entry screen's gesture: turn sound on (if chosen), then start the film from 0s.
   const enter = useCallback(async (withSound: boolean) => {
+    markFilmSeen();
     setGateLeaving(true);
     if (withSound && sound) {
       saveSoundPref(true);
