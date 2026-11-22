@@ -259,7 +259,12 @@ export const features = pgTable(
     createdAt: ts("created_at").notNull().defaultNow(),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   },
-  (t) => [uniqueIndex("features_key_key").on(t.productId, t.key), index("features_product_idx").on(t.productId), index("features_release_idx").on(t.releaseId)],
+  (t) => [
+    uniqueIndex("features_key_key").on(t.productId, t.key),
+    index("features_product_idx").on(t.productId),
+    index("features_release_idx").on(t.releaseId),
+    index("features_module_idx").on(t.moduleId),
+  ],
 );
 
 export const tickets = pgTable(
@@ -283,6 +288,7 @@ export const tickets = pgTable(
     index("tickets_product_idx").on(t.productId),
     index("tickets_feature_idx").on(t.featureId),
     index("tickets_assignee_idx").on(t.assigneeId),
+    index("tickets_product_status_idx").on(t.productId, t.status),
   ],
 );
 
@@ -306,7 +312,7 @@ export const bugs = pgTable(
     createdAt: ts("created_at").notNull().defaultNow(),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   },
-  (t) => [uniqueIndex("bugs_key_key").on(t.productId, t.key), index("bugs_product_idx").on(t.productId)],
+  (t) => [uniqueIndex("bugs_key_key").on(t.productId, t.key), index("bugs_product_idx").on(t.productId), index("bugs_release_idx").on(t.releaseId), index("bugs_assignee_idx").on(t.assigneeId)],
 );
 
 /** Next number per key prefix (PAY, AUTH…), incremented atomically so keys never collide. */
@@ -367,7 +373,7 @@ export const activity = pgTable(
     toValue: text("to_value"),
     at: ts("at").notNull().defaultNow(),
   },
-  (t) => [index("activity_product_idx").on(t.productId, t.at), index("activity_target_idx").on(t.targetKind, t.targetId)],
+  (t) => [index("activity_product_idx").on(t.productId, t.at), index("activity_target_idx").on(t.targetKind, t.targetId), index("activity_actor_idx").on(t.productId, t.actorId, t.at)],
 );
 
 export const notificationState = pgTable(

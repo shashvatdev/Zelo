@@ -22,6 +22,20 @@
       "when": 1795369567899,
       "tag": "0002_ask_zelo",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795372834044,
+      "tag": "0003_ai_scale_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795372834366,
+      "tag": "0004_ai_search",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,5 @@
 import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { ask as demoAnswer } from "@/lib/ask";
-import type { Graph } from "@/data/model";
 import type { Role } from "../auth";
 import { config } from "../config";
 import { db, schema } from "../db";
@@ -9,7 +8,8 @@ import { loadGraph, productOf } from "../graph";
 import { HttpError, notFound } from "../http";
 import { AiUnavailable, chat, RateLimited, type ChatMessage } from "./groq";
 import { systemPrompt, type View } from "./prompt";
-import { allKeys, cardFor, runTool, toolsFor, toolStatus, type Proposal, type ToolCtx } from "./tools";
+import { itemById, itemsByKeys, loadDims, summary as boardSummary, type Dims } from "./board";
+import { cardOf, runTool, toolsFor, toolStatus, type Proposal, type ToolCtx } from "./tools";
 
 /**
  * One question → one answer. The loop:
@@ -32,7 +32,7 @@ export type SavedMessage = { id: string; role: "user" | "assistant"; content: st
 const MAX_ROUNDS = 6;
 const HISTORY = 12;
 const KEY_RE = /\b[A-Z][A-Z0-9]{1,6}-\d{2,6}\b/g;
-const TOOL_RESULT_MAX = 9000;
+const TOOL_RESULT_MAX = 12_000; // ~3k tokens; tools are designed to stay under this
 
 /* ---------- limits ---------- */
 
@@ -160,10 +160,12 @@ export async function runAsk(o: {
   await db.insert(schema.aiMessages).values({ conversationId: conv.id, workspaceId: o.workspaceId, userId: o.user.id, role: "user", content: o.message });
   o.emit({ type: "meta", conversationId: conv.id, title: conv.title });
 
-  const { graph: g } = await loadGraph(o.workspaceId, product.id);
-  const ctx: ToolCtx = { g, workspaceId: o.workspaceId, productId: product.id, user: o.user, role: o.role, plan: o.plan, proposals: [], scope: o.view.scope };
+  // Small tables + cached aggregates only; big tables are read by the tools, query by query.
+  const dims = await loadDims(o.workspaceId, product.id);
+  const [summary, open] = await Promise.all([boardSummary(product.id, dims.product.version), o.view.selected ? itemById(product.id, o.view.selected.kind, o.view.selected.id) : null]);
+  const ctx: ToolCtx = { dims, workspaceId: o.workspaceId, productId: product.id, user: o.user, role: o.role, plan: o.plan, proposals: [], scope: o.view.scope };
   const tools = toolsFor(o.role);
-  const messages: ChatMessage[] = [{ role: "system", content: systemPrompt({ g, user: o.user, role: o.role, view: o.view, now: new Date() }) }, ...past, { role: "user", content: o.message }];
+  const messages: ChatMessage[] = [{ role: "system", content: systemPrompt({ dims, summary, open, user: o.user, role: o.role, view: o.view, now: new Date() }) }, ...past, { role: "user", content: o.message }];
 
   const usage = { prompt: 0, completion: 0 };
   const audit: { name: string; args: unknown; ok: boolean }[] = [];
@@ -220,9 +222,7 @@ export async function runAsk(o: {
     // Guard: keys that don't exist on the board mean the answer made something up. One rewrite.
     answer = normalizeKeys(answer);
     // Keys the person typed themselves are fine to repeat ("PAY-777 doesn't exist").
-    const real = allKeys(g);
-    for (const k of o.message.toUpperCase().match(KEY_RE) ?? []) real.add(k);
-    const fake = [...new Set(answer.match(KEY_RE) ?? [])].filter((k) => !real.has(k) && looksLikeItemKey(g, k));
+    const fake = await unknownKeys(dims, product.id, answer, o.message);
     if (fake.length) {
       console.warn("[ai] answer used unknown keys", fake);
       o.emit({ type: "reset" });
@@ -230,7 +230,7 @@ export async function runAsk(o: {
       messages.push({ role: "assistant", content: answer });
       messages.push({ role: "user", content: `(System check: ${fake.join(", ")} do not exist on this board. Rewrite your answer using only items returned by tools, without those keys. Don't mention this check.)` });
       answer = normalizeKeys((await turn(false)).content);
-      const still = [...new Set(answer.match(KEY_RE) ?? [])].filter((k) => !real.has(k) && looksLikeItemKey(g, k));
+      const still = await unknownKeys(dims, product.id, answer, o.message);
       if (still.length) answer = answer.replace(KEY_RE, (k) => (still.includes(k) ? "(unknown item)" : k));
     }
     // Guard 2: talking about a confirm card when no change was prepared this turn.
@@ -251,7 +251,8 @@ export async function runAsk(o: {
       // Groq is rate-limiting or down. Say so honestly; only use the built-in board engine when it
       // actually matched the question (it answers a fixed set of question types).
       error = e instanceof RateLimited ? "rate_limited" : "ai_unavailable";
-      const fb = demoAnswer(g, o.message, o.view.scope);
+      // The built-in engine needs the whole board in memory: only worth it on small boards.
+      const fb = summary.totals.tickets <= 3000 ? demoAnswer((await loadGraph(o.workspaceId, product.id)).graph, o.message, o.view.scope) : { text: "", items: [] };
       const secs = e instanceof RateLimited ? Math.max(5, Math.ceil(e.waitMs / 1000)) : 0;
       const busy = e instanceof RateLimited ? `I've hit the AI's speed limit for the moment. Ask again in about ${secs} seconds.` : "The AI isn't reachable right now. Please try again in a minute.";
       answer = fb.items.length ? `${fb.text}\n\n_(${busy} Meanwhile, this is a quick answer straight from the board.)_` : busy;
@@ -263,7 +264,7 @@ export async function runAsk(o: {
     } else throw e;
   }
 
-  const cards = cardsFrom(g, answer, ctx.proposals);
+  const cards = await cardsFrom(dims, product.id, answer, ctx.proposals);
   const saved = await save(o, conv.id, answer, cards, ctx.proposals, usage, audit, model, error);
   o.emit({ type: "done", message: saved });
 }
@@ -274,22 +275,30 @@ const CLAIMS_CARD = /card (is )?ready|card ready (hai|below)|ready to confirm|re
 /** Models sometimes write keys with typographic hyphens (PAY‑191); make them plain so they link and get checked. */
 const normalizeKeys = (t: string) => t.replace(/[\u00a0\u202f\u2007]/g, " ").replace(/\b([A-Z][A-Z0-9]{1,6})[\u2010-\u2015\u2212\uFE63\uFF0D](\d{2,6})\b/g, "$1-$2");
 
-/** A key-shaped token whose prefix is one of this board's prefixes (so "COVID-19" isn't flagged). */
-function looksLikeItemKey(g: Graph, k: string) {
-  const prefixes = new Set([...g.tickets, ...g.bugs, ...g.features].map((x) => x.key.split("-")[0].toUpperCase()));
-  return prefixes.has(k.split("-")[0]);
+/**
+ * Key-shaped tokens in the answer that don't exist on this board. Only tokens with one of the
+ * board's prefixes count (so "COVID-19" isn't flagged), and keys the person typed are allowed
+ * ("PAY-777 doesn't exist"). One batched, indexed lookup, whatever the board's size.
+ */
+async function unknownKeys(dims: Dims, productId: string, answer: string, question: string) {
+  const typed = new Set(question.toUpperCase().match(KEY_RE) ?? []);
+  const candidates = [...new Set(answer.match(KEY_RE) ?? [])].filter((k) => !typed.has(k) && dims.prefixes.has(k.split("-")[0]));
+  if (!candidates.length) return [];
+  const found = await itemsByKeys(productId, candidates);
+  return candidates.filter((k) => !found.has(k));
 }
 
 /** Cards for the items the answer mentions, in order, skipping ones already shown on a proposal. */
-function cardsFrom(g: Graph, text: string, proposals: Proposal[]): AiCard[] {
+async function cardsFrom(dims: Dims, productId: string, text: string, proposals: Proposal[]): Promise<AiCard[]> {
+  const keys = [...new Set(text.match(KEY_RE) ?? [])].slice(0, 30);
+  if (!keys.length) return [];
+  const found = await itemsByKeys(productId, keys);
   const onProposals = new Set(proposals.map((p) => p.card?.go.selected?.id).filter(Boolean));
   const out: AiCard[] = [];
-  const seen = new Set<string>();
-  for (const k of text.match(KEY_RE) ?? []) {
-    if (seen.has(k)) continue;
-    seen.add(k);
-    const c = cardFor(g, k);
-    if (c && !onProposals.has(c.go.selected?.id)) out.push(c);
+  for (const k of keys) {
+    const it = found.get(k);
+    if (!it || onProposals.has(it.v.id)) continue;
+    out.push(cardOf(dims, it));
     if (out.length >= 12) break;
   }
   return out;
