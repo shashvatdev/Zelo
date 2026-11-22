@@ -1,53 +1,69 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { currentUser, enterDemo, findUserByEmail, isEmail, logIn, useDb } from "@/lib/account";
-import { DemoNote, Field, GoogleIcon, Modal } from "../ui";
+import { enterDemo, forgotPassword, isEmail, logIn, useMe, useProviders } from "@/lib/account";
+import { ApiError } from "@/lib/api";
+import { DemoNote, Field, Modal } from "../ui";
 import AuthShell, { SITE_URL } from "./AuthShell";
+import { GoogleButton } from "./Signup";
 
 export default function Login() {
-  const db = useDb();
   const router = useRouter();
+  const params = useSearchParams();
+  const next = params.get("next")?.startsWith("/") ? params.get("next")! : "/app";
+  const { me } = useMe();
+  const { data: providers } = useProviders();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [google, setGoogle] = useState(false);
+  const [error, setError] = useState(params.get("error") === "google" ? "Google sign-in didn't finish. Try again." : "");
+  const [busy, setBusy] = useState(false);
   const [forgot, setForgot] = useState(false);
-  const signedIn = db ? currentUser(db) : undefined;
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSent, setForgotSent] = useState(false);
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!db) return;
     if (!isEmail(email)) return setError("Enter the email you signed up with.");
-    const u = findUserByEmail(db, email);
-    if (!u) return setError("No account with this email. Check for an invite email, or create an account.");
     if (!password) return setError("Enter your password.");
-    logIn(u.id);
-    router.push("/app");
+    setBusy(true);
+    setError("");
+    try {
+      await logIn(email, password);
+      router.push(next);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Couldn't log in.");
+      setBusy(false);
+    }
+  };
+
+  const demo = async () => {
+    setBusy(true);
+    try {
+      await enterDemo();
+      router.push("/app");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Couldn't open the sample workspace.");
+      setBusy(false);
+    }
   };
 
   return (
     <AuthShell>
       <h1>Welcome back</h1>
       <p className="lede">Log in to your product map.</p>
-      {signedIn && (
-        <button type="button" className="resume" onClick={() => router.push("/app")}>
-          <span className="resume-av">{signedIn.name[0]}</span>
+      {me && (
+        <button type="button" className="resume" onClick={() => router.push(next)}>
+          <span className="resume-av">{me.user.name[0]}</span>
           <span>
-            <strong>Continue as {signedIn.name}</strong>
-            <small>{signedIn.email}</small>
+            <strong>Continue as {me.user.name}</strong>
+            <small>{me.user.email}</small>
           </span>
           <span aria-hidden="true">→</span>
         </button>
       )}
-      <button type="button" className="btn-google" onClick={() => setGoogle(true)}>
-        <GoogleIcon /> Continue with Google
-      </button>
-      <div className="or">
-        <span>or</span>
-      </div>
+      <GoogleButton next={next} />
       <form className="form" onSubmit={submit} noValidate>
         <Field label="Email">
           <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
@@ -57,85 +73,65 @@ export default function Login() {
         </Field>
         <div className="row-between">
           <span />
-          <button type="button" className="link-btn" onClick={() => setForgot(true)}>
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              setForgotEmail(email);
+              setForgotSent(false);
+              setForgot(true);
+            }}
+          >
             Forgot password?
           </button>
         </div>
         {error && <p className="form-error">{error}</p>}
-        <button type="submit" className="btn-ink wide big">
-          Log in
+        <button type="submit" className="btn-ink wide big" disabled={busy}>
+          {busy ? "Logging in…" : "Log in"}
         </button>
       </form>
       <p className="switch">
         New to Zelo? <a href={`${SITE_URL}/pricing`}>See plans</a> or <Link href="/signup?plan=free">start free</Link>
       </p>
-      <button
-        type="button"
-        className="demo-cta"
-        onClick={() => {
-          enterDemo();
-          router.push("/app");
-        }}
-      >
-        <span>✦</span>
-        <span>
-          <strong>Open the sample workspace</strong>
-          <small>Acme Store with 5 versions, signed in as Bhumika</small>
-        </span>
-        <span aria-hidden="true">→</span>
-      </button>
-      <DemoNote>Accounts live in this browser. Any password works for an existing account.</DemoNote>
-
-      {google && db && (
-        <Modal title="Choose an account" sub="Demo: accounts saved in this browser" onClose={() => setGoogle(false)} width={400}>
-          {db.users.length ? (
-            <ul className="acct-list">
-              {db.users.map((u) => (
-                <li key={u.id}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      logIn(u.id);
-                      router.push("/app");
-                    }}
-                  >
-                    <span className="acct-av">{u.name[0]}</span>
-                    <span>
-                      <strong>{u.name}</strong>
-                      <small>{u.email}</small>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="lede">No accounts in this browser yet. Create one first.</p>
-          )}
-          <div className="form-actions">
-            <Link className="btn-ghost" href="/signup?plan=free">
-              Use another account
-            </Link>
-          </div>
-        </Modal>
+      {providers?.demo && (
+        <button type="button" className="demo-cta" onClick={() => void demo()} disabled={busy}>
+          <span>✦</span>
+          <span>
+            <strong>Open the sample workspace</strong>
+            <small>Acme Store with 5 versions, as Bhumika</small>
+          </span>
+          <span aria-hidden="true">→</span>
+        </button>
       )}
+
       {forgot && (
-        <Modal title="Reset your password" sub="We'll email you a link to set a new one." onClose={() => setForgot(false)} width={400}>
-          <form
-            className="form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setForgot(false);
-              setError("");
-            }}
-          >
-            <Field label="Email">
-              <input type="email" defaultValue={email} placeholder="you@company.com" />
-            </Field>
-            <button type="submit" className="btn-ink wide">
-              Send reset link
-            </button>
-            <DemoNote>No email is sent in the demo.</DemoNote>
-          </form>
+        <Modal title="Reset your password" sub="We'll email you a link to set a new one." onClose={() => setForgot(false)} width={420}>
+          {forgotSent ? (
+            <div className="form">
+              <p className="lede">If an account exists for {forgotEmail}, a reset link is on its way. It works for one hour.</p>
+              {providers?.devMailbox && <DemoNote>Development: open the email in the <a href="/dev/mailbox">dev mailbox</a>.</DemoNote>}
+              <button type="button" className="btn-ink wide" onClick={() => setForgot(false)}>
+                Done
+              </button>
+            </div>
+          ) : (
+            <form
+              className="form"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!isEmail(forgotEmail)) return;
+                await forgotPassword(forgotEmail).catch(() => {});
+                setForgotSent(true);
+              }}
+            >
+              <Field label="Email">
+                <input type="email" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} placeholder="you@company.com" />
+              </Field>
+              <button type="submit" className="btn-ink wide" disabled={!isEmail(forgotEmail)}>
+                Send reset link
+              </button>
+            </form>
+          )}
         </Modal>
       )}
     </AuthShell>

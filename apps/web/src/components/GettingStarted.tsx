@@ -39,7 +39,7 @@ export default function GettingStarted({ ws }: { ws: Workspace }) {
   }, [state.askOpen, flags, key]);
 
   const g = state.graph;
-  const others = ws.members.filter((m) => m.role !== "owner" && m.status !== "revoked");
+  const others = [...ws.members.filter((m) => m.role !== "owner"), ...ws.invites];
   const current = g.releases.find((r) => r.state === "current") ?? g.releases[0];
   const steps: Step[] = [
     { id: "ws", label: "Create your workspace", done: true, cta: "" },

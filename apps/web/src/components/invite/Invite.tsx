@@ -1,90 +1,36 @@
 "use client";
 
 import { useState, type ClipboardEvent, type KeyboardEvent } from "react";
-import { INVITE_DAYS, invite, isEmail, PLANS, ROLE_HINT, ROLE_LABEL, type Member, type Role, type User, type Workspace } from "@/lib/account";
+import { invite, isEmail, PLANS, ROLE_HINT, ROLE_LABEL, useProviders, type Role, type SentInvite, type Workspace } from "@/lib/account";
+import { ApiError } from "@/lib/api";
 import { Picker } from "../Picker";
-import { Logo, Modal } from "../ui";
 
-export const inviteLink = (token?: string) => (typeof window === "undefined" ? "" : `${window.location.origin}/invite?token=${token ?? ""}`);
+const ROLES: Exclude<Role, "owner">[] = ["admin", "member", "viewer"];
 
-/** What the invitee receives. Rendered as an email client would show it. */
-export function InviteEmail({ ws, member, inviter, product }: { ws: Workspace; member: Pick<Member, "email" | "role" | "token">; inviter?: User; product?: string }) {
-  const from = inviter?.name ?? "Your teammate";
-  return (
-    <div className="mail">
-      <div className="mail-meta">
-        <div>
-          <span>From</span>
-          <b>Zelo</b> &lt;invites@zelo.app&gt;
-        </div>
-        <div>
-          <span>To</span>
-          {member.email}
-        </div>
-        <div>
-          <span>Subject</span>
-          <b>
-            {from} invited you to {ws.name || "their workspace"} on Zelo
-          </b>
-        </div>
-      </div>
-      <div className="mail-body">
-        <Logo size={22} />
-        <h3>
-          Join {ws.name || "the team"} on Zelo
-        </h3>
-        <p>
-          <b>{from}</b> invited you to work on {product ? <b>{product}</b> : "their product"} as {member.role === "admin" ? "an" : "a"} <b>{ROLE_LABEL[member.role].toLowerCase()}</b>. See every version, feature and ticket as one connected tree.
-        </p>
-        <a className="mail-btn" href={inviteLink(member.token)} target="_blank" rel="noreferrer">
-          Accept invitation
-        </a>
-        <p className="mail-small">
-          This link works for {INVITE_DAYS} days and only for {member.email}. If you weren&apos;t expecting it, you can ignore this email.
-        </p>
-      </div>
-    </div>
-  );
+export async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
 }
-
-export function EmailPreview({ onClose, ...p }: Parameters<typeof InviteEmail>[0] & { onClose: () => void }) {
-  return (
-    <Modal title="Invite email" sub="What lands in their inbox. Demo: no email is sent; open the link to accept." onClose={onClose} width={560}>
-      <InviteEmail {...p} />
-      <div className="form-actions">
-        <button
-          type="button"
-          className="btn-ghost"
-          onClick={() => {
-            void navigator.clipboard?.writeText(inviteLink(p.member.token));
-          }}
-        >
-          Copy invite link
-        </button>
-        <a className="btn-ink" href={inviteLink(p.member.token)} target="_blank" rel="noreferrer">
-          Open as {p.member.email.split("@")[0]} ↗
-        </a>
-      </div>
-    </Modal>
-  );
-}
-
-const ROLES: Role[] = ["admin", "member", "viewer"];
 
 /**
  * Invite people by email: type or paste several, pick a role, send.
- * Shows seats left and, after sending, the email preview and link for each person.
+ * The server checks seats and sends the emails; each sent invite gets a copyable link.
  */
-export function InviteForm({ ws, me, product, onSent, compact = false }: { ws: Workspace; me: User; product?: string; onSent?: (m: Member[]) => void; compact?: boolean }) {
+export function InviteForm({ ws, compact = false, onSent }: { ws: Workspace; compact?: boolean; onSent?: (m: SentInvite[]) => void }) {
+  const { data: providers } = useProviders();
   const [emails, setEmails] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
-  const [role, setRole] = useState<Role>("member");
+  const [role, setRole] = useState<Exclude<Role, "owner">>("member");
   const [error, setError] = useState("");
-  const [sent, setSent] = useState<Member[]>([]);
-  const [preview, setPreview] = useState<Member | null>(null);
+  const [sent, setSent] = useState<SentInvite[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const used = ws.members.filter((m) => m.status !== "revoked" && m.role !== "viewer").length;
+  const used = ws.members.filter((m) => m.role !== "viewer").length + ws.invites.filter((i) => i.role !== "viewer" && !i.expired).length;
   const seats = ws.plan === "free" ? PLANS.free.maxUsers! : ws.seats;
   const editors = role === "viewer" ? 0 : emails.length;
   const over = used + editors > seats;
@@ -92,7 +38,7 @@ export function InviteForm({ ws, me, product, onSent, compact = false }: { ws: W
   const add = (raw: string) => {
     const parts = raw.split(/[\s,;]+/).map((s) => s.trim().toLowerCase()).filter(Boolean);
     const bad = parts.filter((p) => !isEmail(p));
-    const known = parts.filter((p) => ws.members.some((m) => m.email === p && m.status === "active"));
+    const known = parts.filter((p) => ws.members.some((m) => m.email === p));
     const good = parts.filter((p) => isEmail(p) && !known.includes(p) && !emails.includes(p));
     if (good.length) setEmails((e) => [...e, ...good]);
     setError(bad.length ? `Not an email: ${bad.join(", ")}` : known.length ? `Already in the workspace: ${known.join(", ")}` : "");
@@ -113,21 +59,29 @@ export function InviteForm({ ws, me, product, onSent, compact = false }: { ws: W
     }
   };
 
-  const send = () => {
-    const list = draft.trim() ? [...emails, ...draft.split(/[\s,;]+/).filter(isEmail)] : emails;
-    if (!list.length) return;
-    const made = invite(ws.id, list, role, me.id);
-    setSent((s) => [...made, ...s]);
-    setEmails([]);
-    setDraft("");
+  const send = async () => {
+    const list = [...emails, ...draft.split(/[\s,;]+/).map((x) => x.trim().toLowerCase()).filter(isEmail)];
+    if (!list.length || busy) return;
+    setBusy(true);
     setError("");
-    onSent?.(made);
+    try {
+      const made = await invite(ws.id, [...new Set(list)], role);
+      setSent((s) => [...made, ...s]);
+      setEmails([]);
+      setDraft("");
+      onSent?.(made);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Couldn't send the invites.");
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const copy = (m: Member) => {
-    void navigator.clipboard?.writeText(inviteLink(m.token));
-    setCopied(m.email);
-    setTimeout(() => setCopied(null), 1600);
+  const copy = async (m: SentInvite) => {
+    if (await copyText(m.link)) {
+      setCopied(m.email);
+      setTimeout(() => setCopied(null), 1600);
+    }
   };
 
   return (
@@ -156,7 +110,7 @@ export function InviteForm({ ws, me, product, onSent, compact = false }: { ws: W
         <Picker
           label="Role"
           value={role}
-          onChange={(v) => setRole(v as Role)}
+          onChange={(v) => setRole(v as Exclude<Role, "owner">)}
           className="pk-compact role-pk"
           menuWidth={250}
           options={ROLES.map((r) => ({ value: r, label: ROLE_LABEL[r], sub: ROLE_HINT[r] }))}
@@ -165,31 +119,32 @@ export function InviteForm({ ws, me, product, onSent, compact = false }: { ws: W
         <span className={`seat-note ${over ? "warn" : ""}`}>
           {used + editors} of {seats} seats{over ? " · add seats in billing" : ""}
         </span>
-        <button type="button" className="btn-ink" onClick={send} disabled={!emails.length && !isEmail(draft.trim())}>
-          Send invite{emails.length > 1 ? `s (${emails.length})` : ""}
+        <button type="button" className="btn-ink" onClick={() => void send()} disabled={busy || (!emails.length && !isEmail(draft.trim()))}>
+          {busy ? "Sending…" : `Send invite${emails.length > 1 ? `s (${emails.length})` : ""}`}
         </button>
       </div>
 
       {sent.length > 0 && (
         <ul className="sent">
           {sent.map((m) => (
-            <li key={m.email + m.token}>
-              <span className="sent-ico">✉</span>
+            <li key={m.id}>
+              <span className={`sent-ico ${m.emailError ? "warn" : ""}`}>✉</span>
               <span className="sent-text">
                 <strong>{m.email}</strong>
-                <small>Invite sent · {ROLE_LABEL[m.role]}</small>
+                <small>{m.emailError ? `Saved, but the email failed: ${m.emailError}` : `Invite sent · ${ROLE_LABEL[m.role as Role]}`}</small>
               </span>
-              <button type="button" className="mini-btn" onClick={() => setPreview(m)}>
-                View email
-              </button>
-              <button type="button" className="mini-btn" onClick={() => copy(m)}>
+              {providers?.devMailbox && (
+                <a className="mini-btn" href={`/dev/mailbox?id=${m.emailId}`} target="_blank" rel="noreferrer">
+                  View email
+                </a>
+              )}
+              <button type="button" className="mini-btn" onClick={() => void copy(m)}>
                 {copied === m.email ? "Copied" : "Copy link"}
               </button>
             </li>
           ))}
         </ul>
       )}
-      {preview && <EmailPreview ws={ws} member={preview} inviter={me} product={product} onClose={() => setPreview(null)} />}
     </div>
   );
 }

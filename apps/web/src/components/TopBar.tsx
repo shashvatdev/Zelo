@@ -95,6 +95,35 @@ function MiscAdd() {
   );
 }
 
+/** "Saving…" while changes are on their way, then a "Saved" that fades out by itself. */
+function SaveState() {
+  const { saving, savedAt, live } = useStore();
+  const dot = (
+    <span className={`live-dot ${live ? "on" : ""}`} title={live ? "Live: changes from your team appear instantly" : "Reconnecting… changes still sync every few seconds"}>
+      {live ? "Live" : "Offline"}
+    </span>
+  );
+  if (saving)
+    return (
+      <>
+        {dot}
+        <span className="save-state saving" role="status" aria-live="polite">
+          Saving…
+        </span>
+      </>
+    );
+  return (
+    <>
+      {dot}
+      {savedAt && (
+        <span key={savedAt} className="save-state saved" role="status" aria-live="polite">
+          Saved
+        </span>
+      )}
+    </>
+  );
+}
+
 export default function TopBar() {
   const { state, dispatch } = useStore();
   const g = state.graph;
@@ -151,6 +180,7 @@ export default function TopBar() {
         </nav>
       </div>
       <div className="top-right">
+        <SaveState />
         <div className="stats">
           <span className="stat">
             <strong>{features}</strong> features

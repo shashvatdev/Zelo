@@ -2,14 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { currentUser, useDb } from "@/lib/account";
+import { useMe } from "@/lib/account";
 
 /** "/" sends signed-in people to their map and everyone else to log in. */
 export default function RootRedirect() {
-  const db = useDb();
+  const { me } = useMe();
   const router = useRouter();
   useEffect(() => {
-    if (db) router.replace(currentUser(db) ? "/app" : "/login");
-  }, [db, router]);
+    if (me !== undefined) router.replace(me ? "/app" : "/login");
+  }, [me, router]);
   return <div className="boot" aria-busy="true" />;
 }

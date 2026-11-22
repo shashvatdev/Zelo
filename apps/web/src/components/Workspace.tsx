@@ -1,11 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { currentUser, currentWorkspace, peopleOf, useDb, type User, type Workspace as Ws } from "@/lib/account";
-import { graphKey } from "@/data/fresh";
+import { useEffect, useRef, useState } from "react";
 import type { Graph } from "@/data/model";
-import { SEED } from "@/data/seed";
+import { useMe, useWorkspace, wsKey, type Workspace as Ws } from "@/lib/account";
+import { revalidate, useQuery } from "@/lib/api";
 import { StoreProvider, useStore } from "@/lib/store";
 import AskZelo from "./AskZelo";
 import Canvas from "./Canvas";
@@ -14,14 +13,8 @@ import Panel from "./Panel";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 
-function Shell({ ws, users }: { ws: Ws; users: User[] }) {
-  const { state, dispatch } = useStore();
-
-  // Members who accepted their invite join the board as people.
-  const people = useMemo(() => peopleOf(ws, users), [ws, users]);
-  useEffect(() => {
-    dispatch({ type: "syncPeople", people });
-  }, [people, dispatch]);
+function Shell({ ws }: { ws: Ws }) {
+  const { state, dispatch, error, clearError } = useStore();
 
   // ⌘K copilot, ⌘\ sidebar, and no page zoom on trackpad pinch (the canvas zooms instead).
   useEffect(() => {
@@ -50,6 +43,18 @@ function Shell({ ws, users }: { ws: Ws; users: User[] }) {
     };
   }, [dispatch]);
 
+  // The board version also moves when people join, leave or change role: refresh the team then.
+  const firstVersion = useRef(state.version);
+  useEffect(() => {
+    if (state.version !== firstVersion.current) void revalidate(wsKey(ws.id));
+  }, [state.version, ws.id]);
+
+  useEffect(() => {
+    if (!error) return;
+    const t = setTimeout(clearError, 7000);
+    return () => clearTimeout(t);
+  }, [error, clearError]);
+
   return (
     <div className={`app ${state.sideOpen ? "" : "side-closed"} ${state.askOpen ? "ask-open" : ""}`}>
       <Sidebar ws={ws} />
@@ -60,6 +65,18 @@ function Shell({ ws, users }: { ws: Ws; users: User[] }) {
           <Panel />
           {!ws.demo && <GettingStarted ws={ws} />}
           <Welcome ws={ws} />
+          {error && (
+            <div className="toast bad" role="alert">
+              <span className="toast-mark">!</span>
+              <div>
+                <strong>{error}</strong>
+                <small>Your board was reloaded from the server.</small>
+              </div>
+              <button type="button" onClick={clearError} aria-label="Dismiss">
+                ×
+              </button>
+            </div>
+          )}
         </div>
       </main>
       <AskZelo />
@@ -98,36 +115,40 @@ function Welcome({ ws }: { ws: Ws }) {
   );
 }
 
-function loadInitial(ws: Ws): Graph {
-  if (ws.demo) return SEED;
-  try {
-    const raw = localStorage.getItem(`${graphKey(ws.id)}-initial`) ?? localStorage.getItem(graphKey(ws.id));
-    if (raw) return JSON.parse(raw) as Graph;
-  } catch {
-    // fall through
-  }
-  return SEED;
+export function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="boot center">
+      <div className="load-error">
+        <strong>We couldn&apos;t load your workspace</strong>
+        <p>{message}</p>
+        <button type="button" className="btn-ink" onClick={onRetry}>
+          Try again
+        </button>
+      </div>
+    </div>
+  );
 }
 
 /** Gate: signed out → login, no finished workspace → onboarding, otherwise the product map. */
 export default function Workspace() {
-  const db = useDb();
+  const { me, error: meError, reload } = useMe();
   const router = useRouter();
-  const user = db ? currentUser(db) : undefined;
-  const ws = db ? currentWorkspace(db) : undefined;
-  const goto = !db ? null : !user ? "/login" : !ws || !ws.onboarded ? "/onboarding" : null;
+  const wsId = me?.activeWorkspaceId ?? null;
+  const active = me?.workspaces.find((w) => w.id === wsId);
+  const goto = me === null ? "/login" : me && (!active || !active.onboarded) ? "/onboarding" : null;
+  const ws = useWorkspace(goto || !me ? null : wsId);
+  const board = useQuery<{ graph: Graph; version: number }>(goto || !me || !wsId ? null : `/api/workspaces/${wsId}/graph`);
 
   useEffect(() => {
     if (goto) router.replace(goto);
   }, [goto, router]);
 
-  const wsId = ws?.id;
-  const initial = useMemo(() => (ws ? loadInitial(ws) : null), [wsId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (!db || goto || !user || !ws || !initial) return <div className="boot" aria-busy="true" />;
+  const err = meError ?? ws.error ?? board.error;
+  if (err) return <LoadError message={err.message} onRetry={() => void Promise.all([reload(), ws.reload(), board.reload()])} />;
+  if (!me || goto || !ws.data || !board.data) return <div className="boot" aria-busy="true" />;
   return (
-    <StoreProvider key={`${ws.id}:${user.id}`} storageKey={graphKey(ws.id)} initial={initial} meId={user.id}>
-      <Shell ws={ws} users={db.users} />
+    <StoreProvider key={`${ws.data.id}:${me.user.id}`} workspaceId={ws.data.id} initial={board.data.graph} version={board.data.version} meId={me.user.id}>
+      <Shell ws={ws.data} />
     </StoreProvider>
   );
 }

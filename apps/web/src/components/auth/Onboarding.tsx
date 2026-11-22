@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { createWorkspace, currentUser, PERSON_COLORS, slugify, updateWorkspace, useDb } from "@/lib/account";
-import { freshGraph, graphKey, MODULE_COLORS, MODULE_SUGGESTIONS, sampleGraph } from "@/data/fresh";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { checkout, onboard, PERSON_COLORS, slugify, updateWorkspace, useMe, useWorkspace } from "@/lib/account";
+import { ApiError } from "@/lib/api";
+import { MODULE_COLORS, MODULE_SUGGESTIONS } from "@/data/fresh";
 import { InviteForm } from "../invite/Invite";
 import { DemoNote, Field, Logo } from "../ui";
 import AuthShell from "./AuthShell";
@@ -84,11 +85,14 @@ function Preview({ ws, product, modules, version, vname, people, mode }: { ws: s
 }
 
 export default function Onboarding() {
-  const db = useDb();
   const router = useRouter();
-  const user = db ? currentUser(db) : undefined;
-  const ws = db && user ? db.workspaces.find((w) => w.ownerId === user.id && !w.onboarded) ?? db.workspaces.find((w) => w.id === db.session?.workspaceId && !w.onboarded) : undefined;
-  const done = db && user ? db.workspaces.some((w) => w.onboarded && w.members.some((m) => m.userId === user.id && m.status === "active")) : false;
+  const { me } = useMe();
+  const user = me?.user;
+  const pendingWs = me?.workspaces.find((w) => w.isOwner && !w.onboarded);
+  const done = !!me?.workspaces.some((w) => w.onboarded);
+  const wsQ = useWorkspace(pendingWs?.id);
+  const ws = wsQ.data;
+  const creating = useRef(false);
 
   const [step, setStep] = useState<StepId>("workspace");
   const [name, setName] = useState("");
@@ -104,17 +108,24 @@ export default function Onboarding() {
   const [vname, setVname] = useState("First release");
   const [date, setDate] = useState(() => inWeeks(6));
   const [tried, setTried] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [slugError, setSlugError] = useState<string | null>(null);
 
   // Signed out → sign up. Free-plan path without a workspace yet → make one. Already set up → the map.
   useEffect(() => {
-    if (!db) return;
-    if (!user) router.replace("/signup");
-    else if (!ws && done) router.replace("/app");
-    else if (!ws) createWorkspace(user.id, "free", 5);
-  }, [db, user, ws, done, router]);
+    if (me === undefined) return;
+    if (me === null) router.replace("/signup");
+    else if (!pendingWs && done) router.replace("/app");
+    else if (!pendingWs && !creating.current) {
+      creating.current = true;
+      void checkout({ plan: "free", seats: 5 }).catch((e: ApiError) => setServerError(e.message));
+    }
+  }, [me, pendingWs, done, router]);
 
-  const invited = useMemo(() => (ws ? ws.members.filter((m) => m.status === "invited").map((m) => m.email) : []), [ws]);
-  if (!db || !user || !ws) return <div className="boot" aria-busy="true" />;
+  const invited = ws ? ws.invites.map((i) => i.email) : [];
+  if (serverError && !ws) return <div className="boot center"><p className="form-error">{serverError}</p></div>;
+  if (!user || !ws) return <div className="boot" aria-busy="true" />;
 
   const effSlug = slugTouched ? slug : slugify(name);
   const idx = STEPS.indexOf(step);
@@ -126,31 +137,56 @@ export default function Onboarding() {
     setStep(flow[Math.max(0, Math.min(flow.length - 1, i + dir))]);
   };
 
-  const finish = () => {
-    const owner = { id: user.id, name: user.name, role: you, color: "var(--coral)" };
-    const graph =
-      mode === "sample"
-        ? sampleGraph(owner, product || undefined)
-        : freshGraph({ productName: product, modules, release: { version, name: vname, date }, owner });
+  const finish = async () => {
+    setBusy(true);
+    setServerError(null);
     try {
-      localStorage.setItem(graphKey(ws.id), JSON.stringify(graph));
-      localStorage.setItem(`${graphKey(ws.id)}-initial`, JSON.stringify(graph));
-      sessionStorage.setItem("zelo-welcome", `Welcome to ${name || "your workspace"}, ${user.name.split(" ")[0]}`);
-    } catch {
-      // storage blocked: the app starts from the sample
+      await onboard(ws.id, {
+        name: name.trim(),
+        slug: effSlug,
+        teamSize: size,
+        title: you,
+        productName: product.trim(),
+        mode,
+        modules,
+        release: mode === "empty" ? { version, name: vname, date } : undefined,
+      });
+      try {
+        sessionStorage.setItem("zelo-welcome", `Welcome to ${name || "your workspace"}, ${user.name.split(" ")[0]}`);
+      } catch {
+        // fine without the toast
+      }
+      router.push("/app");
+    } catch (e) {
+      const err = e instanceof ApiError ? e : null;
+      if (err?.field === "slug") {
+        setSlugError(err.message);
+        setStep("workspace");
+      } else setServerError(err?.message ?? "Couldn't finish setup. Try again.");
+      setBusy(false);
     }
-    updateWorkspace(ws.id, { name: name.trim(), slug: effSlug, teamSize: size, onboarded: true });
-    router.push("/app");
   };
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTried(true);
-    if (step === "workspace" && (!name.trim() || !effSlug)) return;
+    if (step === "workspace" && (!name.trim() || effSlug.length < 2)) return;
     if (step === "product" && !product.trim()) return;
     if (step === "modules" && !modules.length) return;
     if (step === "version" && !version.trim()) return;
-    if (step === "workspace") updateWorkspace(ws.id, { name: name.trim(), slug: effSlug, teamSize: size });
+    if (step === "workspace") {
+      // Reserve the name and URL now, so a taken URL is caught on this step.
+      setBusy(true);
+      try {
+        await updateWorkspace(ws.id, { name: name.trim(), slug: effSlug, teamSize: size });
+        setSlugError(null);
+      } catch (err) {
+        setBusy(false);
+        if (err instanceof ApiError && (err.field === "slug" || err.status === 409)) return setSlugError(err.message);
+        return setServerError(err instanceof ApiError ? err.message : "Couldn't save. Try again.");
+      }
+      setBusy(false);
+    }
     go(1);
   };
 
@@ -175,13 +211,14 @@ export default function Onboarding() {
             <Field label="Workspace name" error={tried && !name.trim() ? "Give it a name." : undefined}>
               <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Acme" />
             </Field>
-            <Field label="Workspace URL" hint="Your team signs in here.">
+            <Field label="Workspace URL" hint="Your team signs in here." error={slugError ?? (tried && effSlug.length < 2 ? "At least 2 letters or numbers." : undefined)}>
               <span className="url-input">
                 <span>zelo.app/</span>
                 <input
                   value={effSlug}
                   onChange={(e) => {
                     setSlugTouched(true);
+                    setSlugError(null);
                     setSlug(slugify(e.target.value));
                   }}
                   placeholder="acme"
@@ -299,8 +336,8 @@ export default function Onboarding() {
             <p className="eyebrow">Step {flow.length - 1} of {flow.length - 1}</p>
             <h1>Bring your team in</h1>
             <p className="lede">They get an email with a link to join {name || "your workspace"}. You can do this later from Members.</p>
-            <InviteForm ws={ws} me={user} product={product} />
-            <DemoNote>No email is actually sent. Use “View email” or “Copy link” to open the invite as that person.</DemoNote>
+            <InviteForm ws={ws} />
+            <DemoNote>Emails go out when an email provider is set up. Until then, “View email” shows exactly what was sent, and “Copy link” works anywhere.</DemoNote>
           </>
         )}
 
@@ -324,7 +361,9 @@ export default function Onboarding() {
               )}
               <li>{invited.length ? `${invited.length} invite${invited.length === 1 ? "" : "s"} sent` : "Just you for now"}</li>
             </ul>
-            <button type="button" className="btn-ink wide big" onClick={finish}>
+            {serverError && <p className="form-error">{serverError}</p>}
+            <button type="button" className="btn-ink wide big" onClick={() => void finish()} disabled={busy}>
+              {busy && <span className="spin" aria-hidden="true" />}
               Open your product map →
             </button>
           </div>
@@ -345,7 +384,7 @@ export default function Onboarding() {
                   Skip for now
                 </button>
               )}
-              <button type="submit" className="btn-ink">
+              <button type="submit" className="btn-ink" disabled={busy}>
                 {step === "team" ? "Continue" : "Next"}
               </button>
             </span>

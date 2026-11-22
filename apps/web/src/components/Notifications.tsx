@@ -58,8 +58,8 @@ export default function Notifications() {
   const g = state.graph;
 
   const all = useMemo(() => buildNotifications(g, state.meId), [g, state.meId]);
-  const read = state.notifRead[state.meId];
-  const before = read?.before ?? state.unreadSince;
+  const read = state.notif ? { ids: state.notif.readIds, before: state.notif.readBefore } : null;
+  const before = read?.before ?? null;
   const isUnread = (n: Notif) => before !== null && n.at > before && !read?.ids.includes(n.id);
   const unread = all.filter(isUnread).length;
   const list = onlyUnread ? all.filter(isUnread) : all;

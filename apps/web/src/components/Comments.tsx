@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -19,13 +18,8 @@ import {
   type Person,
   type Status,
 } from "@/data/model";
-import {
-  deleteFile,
-  fmtSize,
-  getFile,
-  MAX_FILE_BYTES,
-  putFile,
-} from "@/lib/files";
+import { fmtSize, MAX_FILE_BYTES } from "@/lib/files";
+import { api, ApiError } from "@/lib/api";
 import { fmtAgo, fmtStamp } from "@/lib/graph";
 import { useStore } from "@/lib/store";
 import { Avatar } from "./nodes";
@@ -142,27 +136,11 @@ function AttachmentView({
   onRemove?: () => void;
   local?: string;
 }) {
-  const [url, setUrl] = useState<string | null>(local ?? null);
+  // Files are served by the API to workspace members only; `local` is the instant preview while uploading.
+  const url = local ?? `/api/files/${a.id}`;
+  const download = local ?? `/api/files/${a.id}?download=1`;
   const [missing, setMissing] = useState(false);
   const [zoom, setZoom] = useState(false);
-
-  useEffect(() => {
-    if (local) return;
-    let made: string | null = null;
-    let alive = true;
-    getFile(a.id)
-      .then((blob) => {
-        if (!alive) return;
-        if (!blob) return setMissing(true);
-        made = URL.createObjectURL(blob);
-        setUrl(made);
-      })
-      .catch(() => alive && setMissing(true));
-    return () => {
-      alive = false;
-      if (made) URL.revokeObjectURL(made);
-    };
-  }, [a.id, local]);
 
   const remove = onRemove && (
     <button
@@ -175,7 +153,7 @@ function AttachmentView({
     </button>
   );
 
-  if (isImage(a) && url) {
+  if (isImage(a) && !missing) {
     return (
       <span className="att att-img">
         <button
@@ -185,7 +163,7 @@ function AttachmentView({
           aria-label={`Open ${a.name}`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element -- local blob URL, not optimisable */}
-          <img src={url} alt={a.name} />
+          <img src={url} alt={a.name} onError={() => setMissing(true)} />
         </button>
         {remove}
         {zoom && (
@@ -199,7 +177,7 @@ function AttachmentView({
             <img src={url} alt={a.name} />
             <div className="lightbox-bar" onClick={(e) => e.stopPropagation()}>
               <span>{a.name}</span>
-              <a href={url} download={a.name}>
+              <a href={download} download={a.name}>
                 Download
               </a>
               <button type="button" onClick={() => setZoom(false)}>
@@ -216,7 +194,7 @@ function AttachmentView({
       <FileIcon a={a} />
       <span className="att-meta">
         {url ? (
-          <a href={url} download={a.name} className="att-name">
+          <a href={download} download={a.name} className="att-name">
             {a.name}
           </a>
         ) : (
@@ -232,7 +210,7 @@ function AttachmentView({
 type Pending = Attachment & { url: string };
 
 export default function Comments({ target }: { target: CommentTarget }) {
-  const { state, dispatch } = useStore();
+  const { state, dispatch, workspaceId } = useStore();
   const people = state.graph.people;
   const list = useMemo(
     () => commentsOn(state.graph.comments, target),
@@ -271,6 +249,7 @@ export default function Comments({ target }: { target: CommentTarget }) {
   ]);
   const [text, setText] = useState("");
   const [files, setFiles] = useState<Pending[]>([]);
+  const [uploading, setUploading] = useState(0);
   const [error, setError] = useState("");
   const [drag, setDrag] = useState(false);
   const [mention, setMention] = useState<{
@@ -322,21 +301,16 @@ export default function Comments({ target }: { target: CommentTarget }) {
         setError(`${f.name} is over 10 MB.`);
         continue;
       }
-      const id = `att-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+      const form = new FormData();
+      form.append("file", f, f.name || "pasted-image.png");
       try {
-        await putFile(id, f);
-        setFiles((cur) => [
-          ...cur,
-          {
-            id,
-            name: f.name || "pasted-image.png",
-            type: f.type || "application/octet-stream",
-            size: f.size,
-            url: URL.createObjectURL(f),
-          },
-        ]);
-      } catch {
-        setError("Could not save the file in this browser.");
+        setUploading((n) => n + 1);
+        const meta = await api<{ id: string; name: string; type: string; size: number }>(`/api/workspaces/${workspaceId}/files`, { form });
+        setFiles((cur) => [...cur, { ...meta, url: URL.createObjectURL(f) }]);
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : `Couldn't upload ${f.name}.`);
+      } finally {
+        setUploading((n) => n - 1);
       }
     }
   };
@@ -347,11 +321,11 @@ export default function Comments({ target }: { target: CommentTarget }) {
       if (f) URL.revokeObjectURL(f.url);
       return cur.filter((x) => x.id !== id);
     });
-    void deleteFile(id).catch(() => {});
+    void api(`/api/files/${id}`, { method: "DELETE" }).catch(() => {});
   };
 
   const send = () => {
-    if (!text.trim() && !files.length) return;
+    if ((!text.trim() && !files.length) || uploading) return;
     dispatch({
       type: "addComment",
       target,
@@ -373,8 +347,7 @@ export default function Comments({ target }: { target: CommentTarget }) {
   };
 
   const remove = (c: Comment) => {
-    dispatch({ type: "deleteComment", id: c.id });
-    c.attachments.forEach((a) => void deleteFile(a.id).catch(() => {}));
+    if (window.confirm("Delete this comment?")) dispatch({ type: "deleteComment", id: c.id });
   };
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -561,9 +534,9 @@ export default function Comments({ target }: { target: CommentTarget }) {
             type="button"
             className="btn-ink"
             onClick={send}
-            disabled={!text.trim() && !files.length}
+            disabled={uploading > 0 || (!text.trim() && !files.length)}
           >
-            Comment
+            {uploading > 0 ? "Uploading…" : "Comment"}
           </button>
         </div>
         {drag && <div className="drop-hint">Drop files to attach</div>}

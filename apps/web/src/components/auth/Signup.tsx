@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { createWorkspace, findUserByEmail, isEmail, PLANS, signUp, useDb, type PlanId } from "@/lib/account";
-import { DemoNote, Field, GoogleIcon, Modal } from "../ui";
+import { checkout, isEmail, PLANS, signUp, useMe, useProviders, type PlanId } from "@/lib/account";
+import { ApiError } from "@/lib/api";
+import { Field, GoogleIcon } from "../ui";
 import AuthShell, { SITE_URL } from "./AuthShell";
 
 function strength(p: string) {
@@ -17,66 +18,63 @@ function strength(p: string) {
 }
 const STRENGTH = ["Too short", "Weak", "Okay", "Good", "Strong"];
 
-/** Google sign-in stand-in: asks for the name and email Google would hand back. */
-export function GoogleDemo({ onDone, onClose }: { onDone: (name: string, email: string) => void; onClose: () => void }) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+export function GoogleButton({ next, label = "Continue with Google" }: { next: string; label?: string }) {
+  const { data } = useProviders();
+  if (!data?.google) return null;
   return (
-    <Modal title="Continue with Google" sub="Demo: Google sign-in needs the backend. Enter the account it would return." onClose={onClose} width={400}>
-      <form
-        className="form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (isEmail(email)) onDone(name, email);
-        }}
-      >
-        <Field label="Name">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
-        </Field>
-        <Field label="Google email">
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
-        </Field>
-        <button type="submit" className="btn-ink wide" disabled={!isEmail(email)}>
-          <GoogleIcon /> Continue
-        </button>
-      </form>
-    </Modal>
+    <>
+      <a className="btn-google" href={`/api/auth/google?next=${encodeURIComponent(next)}`}>
+        <GoogleIcon /> {label}
+      </a>
+      <div className="or">
+        <span>or with email</span>
+      </div>
+    </>
   );
 }
 
 export default function Signup() {
-  const db = useDb();
   const router = useRouter();
   const params = useSearchParams();
+  const { me } = useMe();
   const plan = (["free", "team", "business"].includes(params.get("plan") ?? "") ? params.get("plan") : "team") as PlanId;
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [agree, setAgree] = useState(false);
   const [tried, setTried] = useState(false);
-  const [google, setGoogle] = useState(false);
-  const exists = db && isEmail(email) ? findUserByEmail(db, email) : undefined;
+  const [busy, setBusy] = useState(false);
+  const [server, setServer] = useState<ApiError | null>(null);
   const st = strength(password);
   const errors = {
     name: !name.trim() ? "Tell us your name." : undefined,
-    email: !isEmail(email) ? "Enter a valid work email." : exists ? "There is already an account with this email." : undefined,
+    email: !isEmail(email) ? "Enter a valid work email." : undefined,
     password: password.length < 8 ? "Use at least 8 characters." : undefined,
     agree: !agree ? "Please accept the terms to continue." : undefined,
   };
   const ok = !Object.values(errors).some(Boolean);
+  const taken = server?.status === 409;
 
-  const next = (userId: string) => {
+  const next = async () => {
     if (plan === "free") {
-      createWorkspace(userId, "free", 5);
+      await checkout({ plan: "free", seats: 5 });
       router.push("/onboarding");
     } else router.push(`/checkout?plan=${plan}`);
   };
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTried(true);
-    if (!ok) return;
-    next(signUp(name, email).id);
+    setServer(null);
+    if (!ok || busy) return;
+    setBusy(true);
+    try {
+      await signUp(name, email, password);
+      await next();
+    } catch (err) {
+      setServer(err instanceof ApiError ? err : new ApiError(0, "Something went wrong."));
+      setBusy(false);
+    }
   };
 
   return (
@@ -87,26 +85,36 @@ export default function Signup() {
       </p>
       <h1>Create your account</h1>
       <p className="lede">It takes about two minutes to get your team&apos;s product map running.</p>
+      {me && (
+        <button type="button" className="resume" onClick={() => void next()}>
+          <span className="resume-av">{me.user.name[0]}</span>
+          <span>
+            <strong>Continue as {me.user.name}</strong>
+            <small>{me.user.email}</small>
+          </span>
+          <span aria-hidden="true">→</span>
+        </button>
+      )}
 
-      <button type="button" className="btn-google" onClick={() => setGoogle(true)}>
-        <GoogleIcon /> Continue with Google
-      </button>
-      <div className="or">
-        <span>or with email</span>
-      </div>
+      <GoogleButton next={plan === "free" ? "/onboarding" : `/checkout?plan=${plan}`} />
 
       <form className="form" onSubmit={submit} noValidate>
         <Field label="Full name" error={tried ? errors.name : undefined}>
           <input autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Bhumika Saxena" />
         </Field>
-        <Field
-          label="Work email"
-          error={(tried || exists) && errors.email ? errors.email : undefined}
-          hint="Use your company email so teammates can find you."
-        >
-          <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
+        <Field label="Work email" error={taken ? server?.message : tried ? errors.email : undefined} hint="Use your company email so teammates can find you.">
+          <input
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (taken) setServer(null);
+            }}
+            placeholder="you@company.com"
+          />
         </Field>
-        {exists && (
+        {taken && (
           <p className="inline-alt">
             <Link href="/login">Log in instead →</Link>
           </p>
@@ -130,25 +138,15 @@ export default function Signup() {
             I agree to the <a href={`${SITE_URL}/terms`}>Terms</a> and <a href={`${SITE_URL}/privacy`}>Privacy Policy</a>.
           </span>
         </label>
-        <button type="submit" className="btn-ink wide big">
-          {plan === "free" ? "Create account" : "Continue to payment"}
+        {server && !taken && <p className="form-error">{server.message}</p>}
+        <button type="submit" className="btn-ink wide big" disabled={busy}>
+          {busy ? <span className="spin" aria-hidden="true" /> : null}
+          {busy ? "Creating your account…" : plan === "free" ? "Create account" : "Continue to payment"}
         </button>
       </form>
       <p className="switch">
         Already have an account? <Link href="/login">Log in</Link>
       </p>
-      <DemoNote>Accounts are saved in this browser only. Passwords are never stored.</DemoNote>
-      {google && (
-        <GoogleDemo
-          onClose={() => setGoogle(false)}
-          onDone={(n, e) => {
-            setGoogle(false);
-            const u = signUp(n, e, "google");
-            if (db && findUserByEmail(db, e)) router.push("/app");
-            else next(u.id);
-          }}
-        />
-      )}
     </AuthShell>
   );
 }

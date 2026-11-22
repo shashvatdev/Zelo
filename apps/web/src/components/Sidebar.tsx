@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { logIn, logOut, PLANS, ROLE_LABEL, useDb, type Workspace } from "@/lib/account";
+import { enterDemo, logOut, PLANS, ROLE_LABEL, switchWorkspace, useMe, type Workspace } from "@/lib/account";
 import { fmtDate, pct, personTickets, progressOf, releaseProgress } from "@/lib/graph";
 import { useStore } from "@/lib/store";
 import NewVersion from "./NewVersion";
@@ -34,7 +34,7 @@ const Plus = () => (
 
 /** Who you are, plus team, billing, switch account (demo) and log out. */
 function UserMenu({ ws }: { ws: Workspace }) {
-  const db = useDb();
+  const { me: session } = useMe();
   const router = useRouter();
   const { state } = useStore();
   const [open, setOpen] = useState(false);
@@ -50,9 +50,11 @@ function UserMenu({ ws }: { ws: Workspace }) {
       window.removeEventListener("keydown", key);
     };
   }, [open]);
-  const me = db?.users.find((u) => u.id === state.meId);
+  const me = session?.user;
   const member = ws.members.find((m) => m.userId === state.meId);
-  const others = ws.members.filter((m) => m.status === "active" && m.userId && m.userId !== state.meId);
+  // Switching person is only offered in the sample workspace (it signs in as the other sample user).
+  const others = ws.demo ? ws.members.filter((m) => m.userId !== state.meId) : [];
+  const otherWorkspaces = (session?.workspaces ?? []).filter((w) => w.id !== ws.id && w.onboarded);
 
   return (
     <div className="umenu" ref={wrap}>
@@ -67,7 +69,7 @@ function UserMenu({ ws }: { ws: Workspace }) {
           </div>
           <Link href="/settings?tab=members" className="umenu-item" role="menuitem">
             Members and invites
-            <span>{ws.members.filter((m) => m.status !== "revoked").length}</span>
+            <span>{ws.members.length + ws.invites.length}</span>
           </Link>
           <Link href="/settings?tab=billing" className="umenu-item" role="menuitem">
             Plan and billing
@@ -76,11 +78,22 @@ function UserMenu({ ws }: { ws: Workspace }) {
           <Link href="/settings?tab=workspace" className="umenu-item" role="menuitem">
             Workspace settings
           </Link>
+          {otherWorkspaces.length > 0 && (
+            <>
+              <p className="umenu-h">Your workspaces</p>
+              {otherWorkspaces.map((w) => (
+                <button key={w.id} type="button" className="umenu-item" role="menuitem" onClick={() => void switchWorkspace(w.id)}>
+                  {w.name || "Untitled"}
+                  <span>{ROLE_LABEL[w.role]}</span>
+                </button>
+              ))}
+            </>
+          )}
           {others.length > 0 && (
             <>
-              <p className="umenu-h">Switch account (demo)</p>
+              <p className="umenu-h">Switch person (sample)</p>
               {others.map((m) => (
-                <button key={m.email} type="button" className="umenu-item" role="menuitem" onClick={() => logIn(m.userId!, ws.id)}>
+                <button key={m.email} type="button" className="umenu-item" role="menuitem" onClick={() => void enterDemo(m.email.startsWith("shashvat") ? "shashvat" : "bhumika")}>
                   <span className="umenu-sw">
                     <Avatar personId={m.userId} size={20} /> {m.name}
                   </span>
@@ -94,8 +107,7 @@ function UserMenu({ ws }: { ws: Workspace }) {
             className="umenu-item danger"
             role="menuitem"
             onClick={() => {
-              logOut();
-              router.replace("/login");
+              void logOut().then(() => router.replace("/login"));
             }}
           >
             Log out
@@ -152,7 +164,7 @@ export default function Sidebar({ ws }: { ws: Workspace }) {
   const first = [...g.releases].sort((a, b) => a.date.localeCompare(b.date))[0];
   const last = releases[0];
   const scopeRelease = state.scope === "all" ? undefined : state.scope;
-  const pending = ws.members.filter((m) => m.status === "invited");
+  const pending = ws.invites.filter((i) => !i.expired);
   const month = (d: string) => fmtDate(d).split(" ").slice(1).join(" ");
 
   useEffect(() => {
@@ -261,7 +273,7 @@ export default function Sidebar({ ws }: { ws: Workspace }) {
           );
         })}
         {pending.map((m) => (
-          <Link key={m.email} href="/settings?tab=members" className="side-item pending">
+          <Link key={m.id} href="/settings?tab=members" className="side-item pending">
             <span className="avatar none" style={{ width: 26, height: 26 }}>
               ✉
             </span>

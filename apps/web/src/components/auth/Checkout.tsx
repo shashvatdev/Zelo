@@ -2,7 +2,8 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
-import { createWorkspace, currentUser, PLANS, updateWorkspace, useDb, yearFromNowLabel, type PlanId } from "@/lib/account";
+import { checkout, PLANS, useMe, yearFromNowLabel, type PlanId } from "@/lib/account";
+import { ApiError } from "@/lib/api";
 import { Picker } from "../Picker";
 import { DemoNote, Field } from "../ui";
 import AuthShell from "./AuthShell";
@@ -48,11 +49,12 @@ function expValid(v: string) {
 const usd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
 
 export default function Checkout() {
-  const db = useDb();
   const router = useRouter();
   const params = useSearchParams();
-  const user = db ? currentUser(db) : undefined;
-  const pending = db && user ? db.workspaces.find((w) => w.ownerId === user.id && !w.onboarded) : undefined;
+  const { me } = useMe();
+  const user = me?.user;
+  // Upgrading from Plan & billing pays for the current workspace instead of creating one.
+  const upgradeId = params.get("upgrade") === "1" ? (me?.workspaces.find((w) => w.id === me.activeWorkspaceId && w.isOwner)?.id ?? null) : null;
   const [plan, setPlan] = useState<PlanId>(() => (["team", "business", "free"].includes(params.get("plan") ?? "") ? (params.get("plan") as PlanId) : "team"));
   const [seats, setSeats] = useState(5);
   const [country, setCountry] = useState("India");
@@ -63,10 +65,11 @@ export default function Checkout() {
   const [holder, setHolder] = useState("");
   const [tried, setTried] = useState(false);
   const [phase, setPhase] = useState<"form" | "paying" | "done">("form");
+  const [payError, setPayError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (db && !user) router.replace("/signup");
-  }, [db, user, router]);
+    if (me === null) router.replace("/signup");
+  }, [me, router]);
 
   const P = PLANS[plan];
   const yearly = P.price * seats * 12;
@@ -81,20 +84,29 @@ export default function Checkout() {
   };
   const ok = !Object.values(errors).some(Boolean);
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTried(true);
-    if (!ok || !user) return;
+    setPayError(null);
+    if (!ok || !user || phase === "paying") return;
     setPhase("paying");
-    setTimeout(() => {
-      const c = plan === "free" ? undefined : { brand: brand || "Card", last4: digits(card).slice(-4), exp };
-      if (pending) updateWorkspace(pending.id, { plan, seats: plan === "free" ? 5 : seats, card: c, paidAt: c ? new Date().toISOString().slice(0, 19) : undefined });
-      else createWorkspace(user.id, plan, plan === "free" ? 5 : seats, c);
+    try {
+      await checkout({
+        plan,
+        seats: plan === "free" ? 5 : seats,
+        country,
+        gstin: gstin || undefined,
+        card: plan === "free" ? undefined : { number: card, exp, cvc, name: holder },
+        workspaceId: upgradeId ?? undefined,
+      });
       setPhase("done");
-    }, 1500);
+    } catch (err) {
+      setPayError(err instanceof ApiError ? err.message : "Payment didn't go through. Try again.");
+      setPhase("form");
+    }
   };
 
-  if (!db || !user) return <div className="boot" aria-busy="true" />;
+  if (!user) return <div className="boot" aria-busy="true" />;
 
   if (phase === "done")
     return (
@@ -126,8 +138,8 @@ export default function Checkout() {
               <dd>{yearFromNowLabel()}</dd>
             </dl>
           )}
-          <button type="button" className="btn-ink wide big" onClick={() => router.push("/onboarding")}>
-            Set up your workspace →
+          <button type="button" className="btn-ink wide big" onClick={() => router.push(upgradeId ? "/settings?tab=billing" : "/onboarding")}>
+            {upgradeId ? "Back to billing →" : "Set up your workspace →"}
           </button>
         </div>
       </AuthShell>
@@ -236,6 +248,11 @@ export default function Checkout() {
           </div>
         </div>
 
+        {payError && (
+          <p className="form-error" role="alert">
+            {payError}
+          </p>
+        )}
         <button type="submit" className="btn-ink wide big" disabled={phase === "paying"}>
           {phase === "paying" ? (
             <>
@@ -255,7 +272,7 @@ export default function Checkout() {
           Payments are handled by the payment provider; Zelo never sees your full card number.
         </p>
       </form>
-      <DemoNote>Test mode: no card is charged. Only the brand and last 4 digits are kept.</DemoNote>
+      <DemoNote>Test mode: no card is charged. 4242 4242 4242 4242 succeeds; 4000 0000 0000 0002 is declined. Only the brand and last 4 digits are stored.</DemoNote>
     </AuthShell>
   );
 }
