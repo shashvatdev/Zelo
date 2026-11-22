@@ -4,5 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 export DATABASE_URL=${TEST_DATABASE_URL:-postgres://localhost:5432/zelo_test}
 export APP_URL=http://localhost:3300 DEV_MAILBOX=1 UPLOAD_DIR=.data/test-uploads TRUST_PROXY=1 IP_LIMIT_PER_HOUR=5
+# Ask Zelo talks to the mock Groq server started by tests/api/ask.test.ts, never the real API.
+export GROQ_API_KEY=test-key GROQ_BASE_URL=http://localhost:3399 GROQ_MODEL=mock-main GROQ_FALLBACK_MODEL=mock-backup AI_PER_MINUTE=20
 node scripts/migrate.mjs
 exec npx next start -p 3300

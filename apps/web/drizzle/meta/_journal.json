@@ -15,6 +15,13 @@
       "when": 1795328821354,
       "tag": "0001_realtime",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795369567899,
+      "tag": "0002_ask_zelo",
+      "breakpoints": true
     }
   ]
 }

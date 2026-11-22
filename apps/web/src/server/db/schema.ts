@@ -384,3 +384,98 @@ export const notificationState = pgTable(
   },
   (t) => [primaryKey({ columns: [t.userId, t.workspaceId] })],
 );
+
+/* ---------- Ask Zelo (AI copilot) ---------- */
+
+/** One chat thread. Private to the person who started it, inside one workspace. */
+export const aiConversations = pgTable(
+  "ai_conversations",
+  {
+    id: id(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default("New chat"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    updatedAt: ts("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("ai_conversations_user_idx").on(t.userId, t.workspaceId, t.updatedAt)],
+);
+
+export type AiCard = {
+  label: string;
+  sub: string;
+  tone?: "ok" | "warn" | "bad" | "muted";
+  go: { scope: string; selected: { kind: "product" | "module" | "release" | "feature" | "ticket" | "bug" | "person"; id: string } | null };
+};
+
+/**
+ * Messages, with the tokens each answer cost. workspace_id/user_id are copied here so
+ * rate limits and daily token budgets are one indexed sum.
+ */
+export const aiMessages = pgTable(
+  "ai_messages",
+  {
+    id: id(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => aiConversations.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["user", "assistant"] }).notNull(),
+    content: text("content").notNull(),
+    cards: jsonb("cards").$type<AiCard[]>().notNull().default([]),
+    /** Tool calls made for this answer (name + arguments), for auditing. */
+    tools: jsonb("tools").$type<{ name: string; args: unknown; ok: boolean }[]>().notNull().default([]),
+    model: text("model"),
+    promptTokens: integer("prompt_tokens").notNull().default(0),
+    completionTokens: integer("completion_tokens").notNull().default(0),
+    error: text("error"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("ai_messages_conversation_idx").on(t.conversationId, t.createdAt),
+    index("ai_messages_workspace_idx").on(t.workspaceId, t.createdAt),
+    index("ai_messages_user_idx").on(t.userId, t.createdAt),
+  ],
+);
+
+/**
+ * A change the AI wants to make. Nothing is written to the board until the person presses
+ * Confirm; then it runs through the same validated runAction as a click in the UI.
+ */
+export const aiProposals = pgTable(
+  "ai_proposals",
+  {
+    id: id(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => aiConversations.id, { onDelete: "cascade" }),
+    messageId: uuid("message_id").references(() => aiMessages.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** The exact server action that Confirm will run. */
+    action: jsonb("action").$type<Record<string, unknown>>().notNull(),
+    /** What the item looked like when proposed; Confirm refuses if it changed since. */
+    expect: jsonb("expect").$type<{ kind: "ticket" | "bug"; id: string; field: "status" | "assigneeId"; value: string | null } | null>(),
+    title: text("title").notNull(),
+    lines: jsonb("lines").$type<string[]>().notNull().default([]),
+    card: jsonb("card").$type<AiCard | null>(),
+    status: text("status", { enum: ["pending", "applied", "cancelled", "failed"] }).notNull().default("pending"),
+    error: text("error"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    resolvedAt: ts("resolved_at"),
+  },
+  (t) => [index("ai_proposals_conversation_idx").on(t.conversationId), index("ai_proposals_message_idx").on(t.messageId)],
+);

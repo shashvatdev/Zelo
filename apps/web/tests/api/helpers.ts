@@ -89,7 +89,7 @@ export async function workspace(opts: { plan?: "free" | "team" | "business"; sea
 
 /** Invite + accept as a brand-new account. Returns the member's client. */
 export async function addMember(owner: Client, wsId: string, role: "admin" | "member" | "viewer" = "member", name = "Member") {
-  const e = email(name.toLowerCase());
+  const e = email(name.toLowerCase().replace(/\s+/g, "."));
   const inv = await owner.post(`/api/workspaces/${wsId}/invites`, { emails: [e], role });
   if (inv.status !== 201) throw new Error(`invite failed ${inv.status} ${JSON.stringify(inv.body)}`);
   const token = new URL(inv.body.invites[0].link).searchParams.get("token")!;
