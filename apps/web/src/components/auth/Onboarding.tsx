@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { checkout, onboard, PERSON_COLORS, slugify, updateWorkspace, useMe, useWorkspace } from "@/lib/account";
+import { nextPath, onboard, PERSON_COLORS, slugify, updateWorkspace, useMe, useWorkspace } from "@/lib/account";
 import { ApiError } from "@/lib/api";
 import { MODULE_COLORS, MODULE_SUGGESTIONS } from "@/data/fresh";
 import { InviteForm } from "../invite/Invite";
@@ -89,10 +89,8 @@ export default function Onboarding() {
   const { me } = useMe();
   const user = me?.user;
   const pendingWs = me?.workspaces.find((w) => w.isOwner && !w.onboarded);
-  const done = !!me?.workspaces.some((w) => w.onboarded);
   const wsQ = useWorkspace(pendingWs?.id);
   const ws = wsQ.data;
-  const creating = useRef(false);
 
   const [step, setStep] = useState<StepId>("workspace");
   const [name, setName] = useState("");
@@ -112,19 +110,29 @@ export default function Onboarding() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [slugError, setSlugError] = useState<string | null>(null);
 
-  // Signed out → sign up. Free-plan path without a workspace yet → make one. Already set up → the map.
+  // Onboarding needs a workspace whose plan is chosen. Signed out → log in and come back;
+  // no plan yet → choose one (never a silent Free plan); everything set up → the map.
+  // While finishing, the workspace turns "onboarded" before we navigate: don't redirect then.
+  const finishing = useRef(false);
   useEffect(() => {
-    if (me === undefined) return;
-    if (me === null) router.replace("/signup");
-    else if (!pendingWs && done) router.replace("/app");
-    else if (!pendingWs && !creating.current) {
-      creating.current = true;
-      void checkout({ plan: "free", seats: 5 }).catch((e: ApiError) => setServerError(e.message));
-    }
-  }, [me, pendingWs, done, router]);
+    if (me === undefined || finishing.current) return;
+    if (me === null) router.replace("/login?next=/onboarding");
+    else if (!pendingWs) router.replace(nextPath(me));
+  }, [me, pendingWs, router]);
 
   const invited = ws ? ws.invites.map((i) => i.email) : [];
-  if (serverError && !ws) return <div className="boot center"><p className="form-error">{serverError}</p></div>;
+  if (wsQ.error && !ws)
+    return (
+      <div className="boot center">
+        <div className="load-error">
+          <strong>We couldn&apos;t load your workspace</strong>
+          <p>{wsQ.error.message}</p>
+          <button type="button" className="btn-ink" onClick={() => void wsQ.reload()}>
+            Try again
+          </button>
+        </div>
+      </div>
+    );
   if (!user || !ws) return <div className="boot" aria-busy="true" />;
 
   const effSlug = slugTouched ? slug : slugify(name);
@@ -140,6 +148,7 @@ export default function Onboarding() {
   const finish = async () => {
     setBusy(true);
     setServerError(null);
+    finishing.current = true;
     try {
       await onboard(ws.id, {
         name: name.trim(),
@@ -163,6 +172,7 @@ export default function Onboarding() {
         setSlugError(err.message);
         setStep("workspace");
       } else setServerError(err?.message ?? "Couldn't finish setup. Try again.");
+      finishing.current = false;
       setBusy(false);
     }
   };

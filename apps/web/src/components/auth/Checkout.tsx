@@ -1,104 +1,84 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
-import { checkout, PLANS, useMe, yearFromNowLabel, type PlanId } from "@/lib/account";
+import { checkout, PLANS, useMe, type CheckoutResult, type PlanId } from "@/lib/account";
 import { ApiError } from "@/lib/api";
 import { Picker } from "../Picker";
 import { DemoNote, Field } from "../ui";
 import AuthShell from "./AuthShell";
 
 const COUNTRIES = ["India", "United States", "United Kingdom", "Germany", "Singapore", "Other"];
-
 const digits = (s: string) => s.replace(/\D/g, "");
-function brandOf(num: string) {
-  const d = digits(num);
-  if (/^4/.test(d)) return "Visa";
-  if (/^(5[1-5]|2[2-7])/.test(d)) return "Mastercard";
-  if (/^3[47]/.test(d)) return "Amex";
-  if (/^(60|65|81|82|508)/.test(d)) return "RuPay";
-  return "";
-}
-function luhn(num: string) {
-  const d = digits(num);
-  let sum = 0;
-  for (let i = 0; i < d.length; i++) {
-    let n = Number(d[d.length - 1 - i]);
-    if (i % 2) {
-      n *= 2;
-      if (n > 9) n -= 9;
-    }
-    sum += n;
-  }
-  return d.length >= 13 && sum % 10 === 0;
-}
-const fmtCard = (v: string) =>
-  digits(v)
-    .slice(0, 19)
-    .replace(/(\d{4})(?=\d)/g, "$1 ");
-const fmtExp = (v: string) => {
-  const d = digits(v).slice(0, 4);
-  return d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
-};
-function expValid(v: string) {
-  const [m, y] = v.split("/").map(Number);
-  if (!m || m > 12 || y === undefined || Number.isNaN(y)) return false;
-  const end = new Date(2000 + y, m, 1);
-  return end > new Date();
-}
 const usd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
+const dateLabel = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "");
+const asPlan = (v: string | null): PlanId | null => (v === "free" || v === "team" || v === "business" ? v : null);
+/** Long enough to read "Confirming payment…", short enough not to annoy. */
+const MIN_PAY_MS = 900;
 
+/**
+ * Step 2 of the start flow: choose a plan and pay.
+ * No payment gateway yet: pressing Pay succeeds at once (a demo payment, clearly labelled).
+ * Handles every way someone can land here: fresh after signup, coming back after paying
+ * (no second charge), adding another workspace, and upgrading from Plan & billing.
+ */
 export default function Checkout() {
   const router = useRouter();
   const params = useSearchParams();
   const { me } = useMe();
   const user = me?.user;
+  const wantUpgrade = params.get("upgrade") === "1";
+  const active = me?.workspaces.find((w) => w.id === me.activeWorkspaceId);
   // Upgrading from Plan & billing pays for the current workspace instead of creating one.
-  const upgradeId = params.get("upgrade") === "1" ? (me?.workspaces.find((w) => w.id === me.activeWorkspaceId && w.isOwner)?.id ?? null) : null;
-  const [plan, setPlan] = useState<PlanId>(() => (["team", "business", "free"].includes(params.get("plan") ?? "") ? (params.get("plan") as PlanId) : "team"));
+  const upgradeWs = wantUpgrade && active?.isOwner && active.onboarded ? active : null;
+  // A workspace whose plan is already chosen but isn't set up yet: offer to carry on instead of paying again.
+  const pending = !wantUpgrade ? me?.workspaces.find((w) => w.isOwner && !w.onboarded) : undefined;
+  const finished = me?.workspaces.find((w) => w.onboarded);
+
+  const [plan, setPlan] = useState<PlanId>(() => asPlan(params.get("plan")) ?? "team");
   const [seats, setSeats] = useState(5);
   const [country, setCountry] = useState("India");
   const [gstin, setGstin] = useState("");
-  const [card, setCard] = useState("");
-  const [exp, setExp] = useState("");
-  const [cvc, setCvc] = useState("");
-  const [holder, setHolder] = useState("");
-  const [tried, setTried] = useState(false);
+  const [changing, setChanging] = useState(false);
   const [phase, setPhase] = useState<"form" | "paying" | "done">("form");
+  const [result, setResult] = useState<CheckoutResult | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (me === null) router.replace("/signup");
-  }, [me, router]);
+    if (me === null) router.replace(`/signup?plan=${asPlan(params.get("plan")) ?? "team"}`);
+  }, [me, router, params]);
+
+  if (!user || !me) return <div className="boot" aria-busy="true" />;
+
+  if (wantUpgrade && !upgradeWs)
+    return (
+      <AuthShell>
+        <h1>Only the owner can change the plan</h1>
+        <p className="lede">Ask the workspace owner to upgrade from Plan &amp; billing.</p>
+        <Link className="btn-ink wide big" href="/app">
+          Back to the map
+        </Link>
+      </AuthShell>
+    );
 
   const P = PLANS[plan];
-  const yearly = P.price * seats * 12;
-  const tax = country === "India" ? Math.round(yearly * 0.18 * 100) / 100 : 0;
+  const paidSeats = plan === "free" ? PLANS.free.maxUsers! : seats;
+  const yearly = P.price * paidSeats * 12;
+  const tax = plan !== "free" && country === "India" ? Math.round(yearly * 0.18 * 100) / 100 : 0;
   const total = yearly + tax;
-  const brand = brandOf(card);
-  const errors = plan === "free" ? {} : {
-    card: !luhn(card) ? "Check the card number." : undefined,
-    exp: !expValid(exp) ? "Use a future date, MM/YY." : undefined,
-    cvc: digits(cvc).length < (brand === "Amex" ? 4 : 3) ? "3 digits on the back." : undefined,
-    holder: !holder.trim() ? "Name as on the card." : undefined,
-  };
-  const ok = !Object.values(errors).some(Boolean);
+  const after = upgradeWs ? "/settings?tab=billing" : "/onboarding";
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    setTried(true);
     setPayError(null);
-    if (!ok || !user || phase === "paying") return;
+    if (phase === "paying") return;
     setPhase("paying");
+    const started = Date.now();
     try {
-      await checkout({
-        plan,
-        seats: plan === "free" ? 5 : seats,
-        country,
-        gstin: gstin || undefined,
-        card: plan === "free" ? undefined : { number: card, exp, cvc, name: holder },
-        workspaceId: upgradeId ?? undefined,
-      });
+      const r = await checkout({ plan, seats: paidSeats, country: plan === "free" ? undefined : country, gstin: plan !== "free" && gstin ? gstin : undefined, workspaceId: upgradeWs?.id });
+      await new Promise((ok) => setTimeout(ok, Math.max(0, MIN_PAY_MS - (Date.now() - started))));
+      setResult(r);
       setPhase("done");
     } catch (err) {
       setPayError(err instanceof ApiError ? err.message : "Payment didn't go through. Try again.");
@@ -106,11 +86,10 @@ export default function Checkout() {
     }
   };
 
-  if (!user) return <div className="boot" aria-busy="true" />;
-
-  if (phase === "done")
+  /* ---------- paid ---------- */
+  if (phase === "done" && result)
     return (
-      <AuthShell step={2}>
+      <AuthShell step={upgradeWs ? undefined : 2}>
         <div className="paid">
           <span className="paid-check" aria-hidden="true">
             <svg viewBox="0 0 52 52">
@@ -118,58 +97,105 @@ export default function Checkout() {
               <path d="M15 27l7 7 15-16" />
             </svg>
           </span>
-          <h1>{plan === "free" ? "You're on the Free plan" : "Payment received"}</h1>
+          <h1>{result.plan === "free" ? "You're on the Free plan" : upgradeWs ? `Upgraded to ${PLANS[result.plan].name}` : "Payment successful"}</h1>
           <p className="lede">
-            {plan === "free"
-              ? "No card needed. Upgrade any time from Plan and billing."
-              : `${P.name} plan for ${seats} ${seats === 1 ? "person" : "people"}, ${usd(total)} billed yearly. A receipt goes to ${user.email}.`}
+            {result.plan === "free"
+              ? "No payment needed. Upgrade any time from Plan & billing."
+              : `${PLANS[result.plan].name} plan for ${result.seats} ${result.seats === 1 ? "person" : "people"}, billed yearly. A receipt is on its way to ${user.email}.`}
           </p>
-          {plan !== "free" && (
+          {result.plan !== "free" && (
             <dl className="receipt">
               <dt>Plan</dt>
               <dd>
-                {P.name} · {seats} seats
+                {PLANS[result.plan].name} · {result.seats} seats
               </dd>
-              <dt>Card</dt>
+              <dt>Paid</dt>
               <dd>
-                {brand || "Card"} ending {digits(card).slice(-4)}
+                {usd(result.totalCents / 100)}
+                {result.taxCents ? ` (incl. ${usd(result.taxCents / 100)} GST)` : ""}
               </dd>
-              <dt>Renews</dt>
-              <dd>{yearFromNowLabel()}</dd>
+              <dt>Payment</dt>
+              <dd>{result.card ? `${result.card.brand} ending ${result.card.last4}` : "Demo payment, no card charged"}</dd>
+              {result.renews && (
+                <>
+                  <dt>Renews</dt>
+                  <dd>{dateLabel(result.renews)}</dd>
+                </>
+              )}
             </dl>
           )}
-          <button type="button" className="btn-ink wide big" onClick={() => router.push(upgradeId ? "/settings?tab=billing" : "/onboarding")}>
-            {upgradeId ? "Back to billing →" : "Set up your workspace →"}
+          <button type="button" className="btn-ink wide big" onClick={() => router.push(after)}>
+            {upgradeWs ? "Back to billing →" : "Set up your workspace →"}
           </button>
         </div>
       </AuthShell>
     );
 
-  return (
-    <AuthShell step={1}>
-      <h1>Choose your plan</h1>
-      <p className="lede">Billed yearly. Change seats or plan any time.</p>
-      <div className="plans" role="radiogroup" aria-label="Plan">
-        {(Object.keys(PLANS) as PlanId[]).map((id) => (
-          <button key={id} type="button" role="radio" aria-checked={plan === id} className={`plan-card ${plan === id ? "on" : ""}`} onClick={() => setPlan(id)}>
-            <span className="plan-top">
-              <strong>{PLANS[id].name}</strong>
-              {id === "team" && <span className="plan-tag">Most teams</span>}
-            </span>
-            <span className="plan-price">
-              {PLANS[id].price ? (
-                <>
-                  <b>${PLANS[id].price}</b> / user / month
-                </>
-              ) : (
-                <>
-                  <b>$0</b> up to 5 users
-                </>
-              )}
-            </span>
-            <span className="plan-blurb">{PLANS[id].blurb}</span>
+  /* ---------- plan already chosen: carry on, don't pay twice ---------- */
+  if (pending && !changing)
+    return (
+      <AuthShell step={1}>
+        <div className="paid">
+          <span className="paid-check" aria-hidden="true">
+            <svg viewBox="0 0 52 52">
+              <circle cx="26" cy="26" r="24" />
+              <path d="M15 27l7 7 15-16" />
+            </svg>
+          </span>
+          <h1>Your plan is all set</h1>
+          <p className="lede">
+            You chose the <b>{PLANS[pending.plan].name}</b> plan. Next, set up your workspace: it takes about a minute.
+          </p>
+          <button type="button" className="btn-ink wide big" onClick={() => router.push("/onboarding")}>
+            Continue setup →
           </button>
-        ))}
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              setPlan(asPlan(params.get("plan")) ?? pending.plan);
+              setChanging(true);
+            }}
+          >
+            Choose a different plan
+          </button>
+        </div>
+      </AuthShell>
+    );
+
+  /* ---------- choose and pay ---------- */
+  return (
+    <AuthShell step={upgradeWs ? undefined : 1}>
+      <h1>{upgradeWs ? `Upgrade ${upgradeWs.name || "your workspace"}` : "Choose your plan"}</h1>
+      <p className="lede">Billed yearly. Change seats or plan any time.</p>
+      {!upgradeWs && !pending && finished && (
+        <p className="inline-note">
+          You already have <b>{finished.name || "a workspace"}</b>. Paying here creates a new, separate workspace. <Link href="/app">Go to {finished.name || "your workspace"} →</Link>
+        </p>
+      )}
+      <div className="plans" role="radiogroup" aria-label="Plan">
+        {(Object.keys(PLANS) as PlanId[])
+          .filter((id) => !upgradeWs || PLANS[id].price > PLANS[upgradeWs.plan].price)
+          .map((id) => (
+            <button key={id} type="button" role="radio" aria-checked={plan === id} className={`plan-card ${plan === id ? "on" : ""}`} onClick={() => setPlan(id)}>
+              <span className="plan-top">
+                <strong>{PLANS[id].name}</strong>
+                {id === "team" && <span className="plan-tag">Most teams</span>}
+              </span>
+              <span className="plan-price">
+                {PLANS[id].price ? (
+                  <>
+                    <b>${PLANS[id].price}</b> / user / month
+                  </>
+                ) : (
+                  <>
+                    <b>$0</b> up to 5 users
+                  </>
+                )}
+              </span>
+              <span className="plan-blurb">{PLANS[id].blurb}</span>
+            </button>
+          ))}
       </div>
 
       <form className="form" onSubmit={submit} noValidate>
@@ -190,38 +216,13 @@ export default function Checkout() {
                 </button>
               </div>
             </div>
-
-            <div className="pay-box">
-              <div className="pay-head">
-                <strong>Card details</strong>
-                <span className="cards-row" aria-hidden="true">
-                  {["Visa", "Mastercard", "RuPay", "Amex"].map((b) => (
-                    <span key={b} className={`cbrand ${brand === b ? "on" : ""}`}>
-                      {b}
-                    </span>
-                  ))}
-                </span>
-              </div>
-              <Field label="Card number" error={tried ? errors.card : undefined} hint="Test card: 4242 4242 4242 4242">
-                <input inputMode="numeric" autoComplete="cc-number" value={card} onChange={(e) => setCard(fmtCard(e.target.value))} placeholder="1234 5678 9012 3456" />
-              </Field>
-              <div className="form-row three">
-                <Field label="Expiry" error={tried ? errors.exp : undefined}>
-                  <input inputMode="numeric" autoComplete="cc-exp" value={exp} onChange={(e) => setExp(fmtExp(e.target.value))} placeholder="MM/YY" />
-                </Field>
-                <Field label="CVC" error={tried ? errors.cvc : undefined}>
-                  <input inputMode="numeric" autoComplete="cc-csc" value={cvc} onChange={(e) => setCvc(digits(e.target.value).slice(0, 4))} placeholder="123" />
-                </Field>
-                <Field label="Country">
-                  <Picker label="Country" value={country} onChange={setCountry} className="pk-field" options={COUNTRIES.map((c) => ({ value: c, label: c }))} trigger={<span className="pk-value">{country}</span>} />
-                </Field>
-              </div>
-              <Field label="Name on card" error={tried ? errors.holder : undefined}>
-                <input autoComplete="cc-name" value={holder} onChange={(e) => setHolder(e.target.value)} placeholder={user.name} />
+            <div className="form-row">
+              <Field label="Billing country">
+                <Picker label="Country" value={country} onChange={setCountry} className="pk-field" options={COUNTRIES.map((c) => ({ value: c, label: c }))} trigger={<span className="pk-value">{country}</span>} />
               </Field>
               {country === "India" && (
-                <Field label="GSTIN" hint="Optional. Adds your GST number to the invoice.">
-                  <input value={gstin} onChange={(e) => setGstin(e.target.value.toUpperCase().slice(0, 15))} placeholder="22AAAAA0000A1Z5" />
+                <Field label="GSTIN" hint="Optional, for your invoice.">
+                  <input value={gstin} onChange={(e) => setGstin(e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, 15))} placeholder="22AAAAA0000A1Z5" />
                 </Field>
               )}
             </div>
@@ -232,7 +233,7 @@ export default function Checkout() {
           <div>
             <span>
               {P.name}
-              {plan !== "free" && ` · ${seats} × $${P.price} × 12 months`}
+              {plan !== "free" && ` · ${paidSeats} × $${P.price} × 12 months`}
             </span>
             <span>{usd(yearly)}</span>
           </div>
@@ -256,7 +257,7 @@ export default function Checkout() {
         <button type="submit" className="btn-ink wide big" disabled={phase === "paying"}>
           {phase === "paying" ? (
             <>
-              <span className="spin" aria-hidden="true" /> Processing payment…
+              <span className="spin" aria-hidden="true" /> {plan === "free" ? "Setting up…" : "Confirming payment…"}
             </>
           ) : plan === "free" ? (
             "Continue with Free"
@@ -264,15 +265,13 @@ export default function Checkout() {
             `Pay ${usd(total)}`
           )}
         </button>
-        <p className="secure">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-            <rect x="2" y="5" width="8" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
-            <path d="M4 5V3.6a2 2 0 0 1 4 0V5" stroke="currentColor" strokeWidth="1.3" />
-          </svg>
-          Payments are handled by the payment provider; Zelo never sees your full card number.
-        </p>
+        {pending && changing && (
+          <button type="button" className="link-btn" onClick={() => setChanging(false)}>
+            Keep my {PLANS[pending.plan].name} plan
+          </button>
+        )}
       </form>
-      <DemoNote>Test mode: no card is charged. 4242 4242 4242 4242 succeeds; 4000 0000 0000 0002 is declined. Only the brand and last 4 digits are stored.</DemoNote>
+      {plan !== "free" && <DemoNote>Demo mode: there&apos;s no payment gateway yet, so pressing Pay succeeds straight away and no card is charged.</DemoNote>}
     </AuthShell>
   );
 }

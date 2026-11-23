@@ -71,12 +71,12 @@ export function resetEmail(p: { to: string; url: string }) {
   };
 }
 
-export function receiptEmail(p: { to: string; workspace: string; plan: string; seats: number; total: string; card: string }) {
+export function receiptEmail(p: { to: string; workspace: string; plan: string; seats: number; total: string; card: string | null }) {
   return {
     to: p.to,
     subject: `Your Zelo receipt: ${p.plan} plan`,
     kind: "receipt",
-    html: layout("Thanks, payment received", `<b>${esc(p.plan)}</b> plan for ${p.seats} seats in <b>${esc(p.workspace || "your workspace")}</b>.<br>Total: <b>${esc(p.total)}</b>, charged to ${esc(p.card)}. Billed yearly.`),
-    text: `Payment received: ${p.plan} plan, ${p.seats} seats, ${p.total}, charged to ${p.card}.`,
+    html: layout("Thanks, payment received", `<b>${esc(p.plan)}</b> plan for ${p.seats} seats in <b>${esc(p.workspace || "your workspace")}</b>.<br>Total: <b>${esc(p.total)}</b>, ${p.card ? `charged to ${esc(p.card)}` : "demo payment (no card was charged)"}. Billed yearly.`),
+    text: `Payment received: ${p.plan} plan, ${p.seats} seats, ${p.total}, ${p.card ? `charged to ${p.card}` : "demo payment (no card was charged)"}.`,
   };
 }

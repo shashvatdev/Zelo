@@ -60,7 +60,7 @@ export const CARD_DECLINE = { number: "4000 0000 0000 0002", exp: "12/30", cvc: 
 
 export async function signup(name = "Owner") {
   const c = client();
-  const e = email(name.toLowerCase());
+  const e = email(name.toLowerCase().replace(/\s+/g, "."));
   const r = await c.post("/api/auth/signup", { name, email: e, password: "correct-horse-9" });
   if (r.status !== 201) throw new Error(`signup failed ${r.status} ${JSON.stringify(r.body)}`);
   return { c, email: e, id: r.body.user.id as string, name };

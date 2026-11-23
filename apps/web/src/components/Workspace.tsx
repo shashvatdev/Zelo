@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Graph } from "@/data/model";
-import { useMe, useWorkspace, wsKey, type Workspace as Ws } from "@/lib/account";
+import { nextPath, switchWorkspace, useMe, useWorkspace, wsKey, type Workspace as Ws } from "@/lib/account";
 import { revalidate, useQuery } from "@/lib/api";
 import { StoreProvider, useStore } from "@/lib/store";
 import AskZelo from "./AskZelo";
@@ -129,15 +129,25 @@ export function LoadError({ message, onRetry }: { message: string; onRetry: () =
   );
 }
 
-/** Gate: signed out → login, no finished workspace → onboarding, otherwise the product map. */
+/**
+ * Gate: signed out → log in (and come back); active workspace set up → the product map;
+ * otherwise wherever this person left off (finish setup, or choose a plan). If the active
+ * workspace isn't ready but another one is, switch to that one instead of bouncing them out.
+ */
 export default function Workspace() {
   const { me, error: meError, reload } = useMe();
   const router = useRouter();
   const wsId = me?.activeWorkspaceId ?? null;
   const active = me?.workspaces.find((w) => w.id === wsId);
-  const goto = me === null ? "/login" : me && (!active || !active.onboarded) ? "/onboarding" : null;
-  const ws = useWorkspace(goto || !me ? null : wsId);
-  const board = useQuery<{ graph: Graph; version: number }>(goto || !me || !wsId ? null : `/api/workspaces/${wsId}/graph`);
+  const ready = me?.workspaces.find((w) => w.onboarded);
+  const switching = !!me && !active?.onboarded && !!ready && !(active?.isOwner && !active.onboarded);
+  const goto = me === null ? "/login?next=/app" : me && !active?.onboarded && !switching ? nextPath(me) : null;
+
+  useEffect(() => {
+    if (switching && ready) void switchWorkspace(ready.id);
+  }, [switching, ready]);
+  const ws = useWorkspace(goto || switching || !me ? null : wsId);
+  const board = useQuery<{ graph: Graph; version: number }>(goto || switching || !me || !wsId ? null : `/api/workspaces/${wsId}/graph`);
 
   useEffect(() => {
     if (goto) router.replace(goto);
@@ -145,7 +155,7 @@ export default function Workspace() {
 
   const err = meError ?? ws.error ?? board.error;
   if (err) return <LoadError message={err.message} onRetry={() => void Promise.all([reload(), ws.reload(), board.reload()])} />;
-  if (!me || goto || !ws.data || !board.data) return <div className="boot" aria-busy="true" />;
+  if (!me || goto || switching || !ws.data || !board.data) return <div className="boot" aria-busy="true" />;
   return (
     <StoreProvider key={`${ws.data.id}:${me.user.id}`} workspaceId={ws.data.id} initial={board.data.graph} version={board.data.version} meId={me.user.id}>
       <Shell ws={ws.data} />

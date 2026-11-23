@@ -283,7 +283,7 @@ export default function Settings() {
                       <span className="cbrand on">{ws.card.brand}</span> •••• {ws.card.last4} <span className="muted">exp {ws.card.exp}</span>
                     </p>
                   ) : (
-                    <p className="muted">{canManage ? "No card on file." : "Only admins can see billing details."}</p>
+                    <p className="muted">{!canManage ? "Only admins can see billing details." : ws.plan !== "free" && ws.paidUntil ? "No card needed: payments are in demo mode until a payment provider is connected." : "No card on file."}</p>
                   )}
                 </section>
                 <section className="bill-card wide">

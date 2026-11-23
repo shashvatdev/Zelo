@@ -32,7 +32,10 @@ describe("checkout and billing", () => {
     expect((await c.post("/api/checkout", { plan: "team", seats: 2, card: { ...CARD_OK, number: "4242 4242 4242 4241" } })).body.error).toMatch(/card number/);
     expect((await c.post("/api/checkout", { plan: "team", seats: 2, card: { ...CARD_OK, exp: "01/20" } })).body.error).toMatch(/expired/);
     expect((await c.post("/api/checkout", { plan: "team", seats: 2, card: { ...CARD_OK, cvc: "1" } })).body.error).toMatch(/security code/);
-    expect((await c.post("/api/checkout", { plan: "team", seats: 2 })).status).toBe(400);
+    // No card: in demo mode (no gateway yet) paying without a card succeeds as a demo payment.
+    const demo = await c.post("/api/checkout", { plan: "team", seats: 2 });
+    expect(demo.status).toBe(200);
+    expect(demo.body.demo).toBe(true);
   });
 
   it("paid plan: totals with GST, stores only brand + last 4, sends a receipt", async () => {

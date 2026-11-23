@@ -13,6 +13,11 @@ export const config = {
   uploadDir: process.env.UPLOAD_DIR ?? ".data/uploads",
   maxUploadBytes: 10 * 1024 * 1024,
   inviteDays: 7,
+  /**
+   * "demo": no payment gateway yet. Paying without a card succeeds at once and is recorded as a
+   * demo payment. Set PAYMENTS_MODE=live once a real gateway adapter is added (then a card is required).
+   */
+  paymentsMode: (process.env.PAYMENTS_MODE === "live" ? "live" : "demo") as "demo" | "live",
   ai: {
     key: process.env.GROQ_API_KEY || null,
     baseUrl: (process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai/v1").replace(/\/$/, ""),

@@ -59,6 +59,11 @@ export async function charge(card: Card, amountCents: number): Promise<ChargeRes
   return { ok: true, ref: `test_${randomUUID()}`, brand: cardBrand(num), last4: num.slice(-4), exp: card.exp };
 }
 
+/** No gateway yet: an instant, always-successful payment, clearly marked as a demo. */
+export function demoCharge(): ChargeResult & { ok: true } {
+  return { ok: true, ref: `demo_${randomUUID()}`, brand: "", last4: "", exp: "" };
+}
+
 export const PRICES = { free: 0, team: 10, business: 20 } as const;
 export const FREE_MAX_USERS = 5;
 

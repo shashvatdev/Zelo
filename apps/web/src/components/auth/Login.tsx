@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { enterDemo, forgotPassword, isEmail, logIn, useMe, useProviders } from "@/lib/account";
+import { enterDemo, forgotPassword, isEmail, logIn, nextPath, safeNext, useMe, useProviders } from "@/lib/account";
 import { ApiError } from "@/lib/api";
 import { DemoNote, Field, Modal } from "../ui";
 import AuthShell, { SITE_URL } from "./AuthShell";
@@ -12,7 +12,8 @@ import { GoogleButton } from "./Signup";
 export default function Login() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next")?.startsWith("/") ? params.get("next")! : "/app";
+  // An explicit ?next= wins; otherwise go wherever this person left off.
+  const next = safeNext(params.get("next"));
   const { me } = useMe();
   const { data: providers } = useProviders();
   const [email, setEmail] = useState("");
@@ -30,8 +31,8 @@ export default function Login() {
     setBusy(true);
     setError("");
     try {
-      await logIn(email, password);
-      router.push(next);
+      const fresh = await logIn(email, password);
+      router.replace(next ?? nextPath(fresh));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't log in.");
       setBusy(false);
@@ -54,7 +55,7 @@ export default function Login() {
       <h1>Welcome back</h1>
       <p className="lede">Log in to your product map.</p>
       {me && (
-        <button type="button" className="resume" onClick={() => router.push(next)}>
+        <button type="button" className="resume" onClick={() => router.push(next ?? nextPath(me))}>
           <span className="resume-av">{me.user.name[0]}</span>
           <span>
             <strong>Continue as {me.user.name}</strong>
@@ -63,7 +64,7 @@ export default function Login() {
           <span aria-hidden="true">→</span>
         </button>
       )}
-      <GoogleButton next={next} />
+      <GoogleButton next={next ?? "/"} />
       <form className="form" onSubmit={submit} noValidate>
         <Field label="Email">
           <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />

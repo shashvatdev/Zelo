@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { checkout, isEmail, PLANS, signUp, useMe, useProviders, type PlanId } from "@/lib/account";
+import { checkout, isEmail, nextPath, PLANS, signUp, useMe, useProviders, type PlanId } from "@/lib/account";
 import { ApiError } from "@/lib/api";
 import { Field, GoogleIcon } from "../ui";
 import AuthShell, { SITE_URL } from "./AuthShell";
@@ -55,11 +55,19 @@ export default function Signup() {
   const ok = !Object.values(errors).some(Boolean);
   const taken = server?.status === 409;
 
+  /** After a new account: Free goes straight to setup; paid plans go to payment. */
   const next = async () => {
     if (plan === "free") {
       await checkout({ plan: "free", seats: 5 });
       router.push("/onboarding");
     } else router.push(`/checkout?plan=${plan}`);
+  };
+  /** Already signed in: pick up where they left off (a plan still to choose → this plan's checkout). */
+  const resume = () => {
+    if (!me) return;
+    const to = nextPath(me);
+    if (to === "/checkout") void next().catch((err) => setServer(err instanceof ApiError ? err : new ApiError(0, "Something went wrong.")));
+    else router.push(to);
   };
 
   const submit = async (e: FormEvent) => {
@@ -86,7 +94,7 @@ export default function Signup() {
       <h1>Create your account</h1>
       <p className="lede">It takes about two minutes to get your team&apos;s product map running.</p>
       {me && (
-        <button type="button" className="resume" onClick={() => void next()}>
+        <button type="button" className="resume" onClick={resume}>
           <span className="resume-av">{me.user.name[0]}</span>
           <span>
             <strong>Continue as {me.user.name}</strong>
@@ -96,7 +104,7 @@ export default function Signup() {
         </button>
       )}
 
-      <GoogleButton next={plan === "free" ? "/onboarding" : `/checkout?plan=${plan}`} />
+      <GoogleButton next={`/checkout?plan=${plan}`} />
 
       <form className="form" onSubmit={submit} noValidate>
         <Field label="Full name" error={tried ? errors.name : undefined}>

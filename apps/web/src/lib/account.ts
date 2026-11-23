@@ -78,6 +78,15 @@ export const useWorkspace = (id: string | null | undefined) => useQuery<Workspac
 export const useProviders = () => useQuery<Providers>("/api/auth/providers");
 
 const refreshMe = () => revalidate(ME);
+
+/** Fetch the signed-in person fresh (and update every component showing them). */
+export async function loadMe() {
+  const me = await api<Me>(ME);
+  setQueryData(ME, me);
+  return me;
+}
+
+export { nextPath, safeNext } from "./flow";
 const refreshWs = (id: string) => Promise.all([revalidate(wsKey(id)), revalidate(ME)]);
 
 /* ---------- auth ---------- */
@@ -85,13 +94,13 @@ const refreshWs = (id: string) => Promise.all([revalidate(wsKey(id)), revalidate
 export async function signUp(name: string, email: string, password: string) {
   await api("/api/auth/signup", { body: { name, email, password } });
   clearQueries();
-  await refreshMe();
+  return loadMe();
 }
 
 export async function logIn(email: string, password: string) {
   await api("/api/auth/login", { body: { email, password } });
   clearQueries();
-  await refreshMe();
+  return loadMe();
 }
 
 export async function logOut() {
@@ -125,8 +134,9 @@ export async function enterDemo(as: "bhumika" | "shashvat" = "bhumika") {
 /* ---------- workspace ---------- */
 
 export type CheckoutInput = { plan: PlanId; seats: number; country?: string; gstin?: string; card?: { number: string; exp: string; cvc: string; name: string }; workspaceId?: string };
+export type CheckoutResult = { workspaceId: string; plan: PlanId; seats: number; totalCents: number; taxCents: number; card: { brand: string; last4: string } | null; demo: boolean; renews: string | null };
 export async function checkout(input: CheckoutInput) {
-  const r = await api<{ workspaceId: string; plan: PlanId; seats: number; totalCents: number; card: { brand: string; last4: string } | null; renews: string | null }>("/api/checkout", { body: input });
+  const r = await api<CheckoutResult>("/api/checkout", { body: input });
   await refreshWs(r.workspaceId);
   return r;
 }
